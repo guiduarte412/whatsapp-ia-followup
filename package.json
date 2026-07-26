@@ -1,0 +1,17 @@
+{
+  "name": "whatsapp-ia-followup",
+  "version": "1.0.0",
+  "description": "Automacao de follow-up de leads via WhatsApp com IA generativa, para uso apos ligacao sem retorno",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3"
+  }
+}
