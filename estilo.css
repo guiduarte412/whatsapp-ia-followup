@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leads em acompanhamento — Fourcon | FourAgro</title>
+<link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+<div class="container">
+  <header class="topo">
+    <div>
+      <p class="marca">Fourcon | FourAgro</p>
+      <h1>Leads em acompanhamento</h1>
+    </div>
+    <a class="botao" href="/novo.html">+ Novo lead</a>
+  </header>
+
+  <div class="cabecalho-lista">
+    <span>Lead</span>
+    <span>Telefone</span>
+    <span>Produto</span>
+    <span>Status</span>
+    <span>Sequência</span>
+  </div>
+
+  <div class="lista" id="lista">
+    <div class="vazio">Carregando…</div>
+  </div>
+</div>
+
+<script>
+const LABELS_STATUS = {
+  sequence_active: 'Sequência ativa',
+  conversa_ia: 'IA conversando',
+  human_handoff: 'Aguardando você',
+  cold_nurture: 'Nutrição futura',
+};
+
+const LABELS_PRODUTO = {
+  agro: 'Agro/rural',
+  imoveis: 'Imóveis',
+  caminhoes: 'Caminhões',
+  credito_empresarial: 'Crédito empresarial',
+};
+
+function progressoHtml(tentativas) {
+  let bolas = '';
+  for (let i = 1; i <= 6; i++) {
+    bolas += `<span class="bola ${i <= (tentativas || 0) ? 'ativa' : ''}"></span>`;
+  }
+  return `<div class="progresso">${bolas}</div>`;
+}
+
+async function carregar() {
+  const lista = document.getElementById('lista');
+  try {
+    const resp = await fetch('/api/leads');
+    const leads = await resp.json();
+
+    if (!leads.length) {
+      lista.innerHTML = '<div class="vazio">Nenhum lead ainda. Adicione o primeiro depois de uma ligação sem retorno.</div>';
+      return;
+    }
+
+    lista.innerHTML = leads.map((lead) => `
+      <a class="linha-lead" href="/lead.html?telefone=${encodeURIComponent(lead.phone)}">
+        <span class="nome">${lead.nome || '—'}</span>
+        <span class="telefone">${lead.phone}</span>
+        <span class="produto">${LABELS_PRODUTO[lead.produto] || lead.produto || '—'}</span>
+        <span class="status ${lead.status}"><span class="ponto"></span>${LABELS_STATUS[lead.status] || lead.status}</span>
+        ${progressoHtml(lead.attemptsSent)}
+      </a>
+    `).join('');
+  } catch (erro) {
+    lista.innerHTML = '<div class="vazio">Não consegui carregar os leads agora.</div>';
+  }
+}
+
+carregar();
+setInterval(carregar, 30000);
+</script>
+</body>
+</html>
