@@ -37,6 +37,41 @@ function getActiveSequenceLeads() {
   return Object.values(db.leads).filter((l) => l.status === 'sequence_active');
 }
 
+function getAllLeads() {
+  const db = load();
+  return Object.values(db.leads).sort((a, b) =>
+    (b.sequenceStartedAt || '').localeCompare(a.sequenceStartedAt || '')
+  );
+}
+
+// Ponto unico que inicia a sequencia de follow-up pra um lead. Usado tanto
+// pelo webhook do RD Station quanto pelo formulario manual do site - os
+// dois caem na mesma logica, pra nunca ficar desalinhado.
+function iniciarSequencia(phone, { nome, produto }) {
+  return upsertLead(phone, {
+    nome,
+    produto,
+    status: 'sequence_active',
+    sequenceStartedAt: new Date().toISOString(),
+    attemptsSent: 0,
+    mensagensEnviadas: [],
+    respostasAutomaticas: 0,
+    conversa: [],
+  });
+}
+
+// Adiciona uma mensagem (de: 'ia' ou 'lead') ao historico de conversa do
+// lead. E esse historico que a IA le pra continuar a conversa depois que
+// o lead responde.
+function appendConversa(phone, { de, texto }) {
+  const db = load();
+  const lead = db.leads[phone];
+  if (!lead) return null;
+  lead.conversa = [...(lead.conversa || []), { de, texto, timestamp: new Date().toISOString() }];
+  save(db);
+  return lead;
+}
+
 // --- Exemplos que "alimentam" o aprendizado da IA ---
 // Isso NAO re-treina o modelo (a Claude nao aprende sozinha em tempo real).
 // O que fazemos aqui e guardar os melhores exemplos reais (mensagens que
@@ -64,6 +99,9 @@ module.exports = {
   getLead,
   upsertLead,
   getActiveSequenceLeads,
+  getAllLeads,
+  iniciarSequencia,
+  appendConversa,
   appendExample,
   getRecentSuccessfulExamples,
 };

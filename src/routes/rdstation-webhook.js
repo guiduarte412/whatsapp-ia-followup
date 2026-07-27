@@ -1,5 +1,5 @@
 const express = require('express');
-const { upsertLead } = require('../db/store');
+const { iniciarSequencia } = require('../db/store');
 
 const router = express.Router();
 
@@ -21,14 +21,7 @@ router.post('/rdstation', express.json(), async (req, res) => {
   }
 
   if (statusNaoAtendeu) {
-    upsertLead(telefone, {
-      nome,
-      produto,
-      status: 'sequence_active',
-      sequenceStartedAt: new Date().toISOString(),
-      attemptsSent: 0,
-      mensagensEnviadas: [],
-    });
+    iniciarSequencia(telefone, { nome, produto });
   }
 
   res.status(200).json({ ok: true });

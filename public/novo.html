@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Novo lead — Fourcon | FourAgro</title>
+<link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+<div class="container">
+  <header class="topo">
+    <div>
+      <p class="marca">Fourcon | FourAgro</p>
+      <h1>Adicionar lead</h1>
+    </div>
+    <a class="botao secundario" href="/index.html">Voltar</a>
+  </header>
+
+  <div class="cartao">
+    <div class="erro" id="erro"></div>
+    <form id="form-lead">
+      <div class="campo">
+        <label for="nome">Nome do lead</label>
+        <input type="text" id="nome" name="nome" required>
+      </div>
+      <div class="campo">
+        <label for="telefone">WhatsApp</label>
+        <input type="text" id="telefone" name="telefone" placeholder="5555999999999" required>
+        <p class="dica">Só números, com código do país e DDD.</p>
+      </div>
+      <div class="campo">
+        <label for="produto">Produto</label>
+        <select id="produto" name="produto" required>
+          <option value="">Selecione</option>
+          <option value="agro">Agro/rural</option>
+          <option value="imoveis">Imóveis</option>
+          <option value="caminhoes">Caminhões</option>
+          <option value="credito_empresarial">Crédito empresarial</option>
+        </select>
+      </div>
+      <button type="submit" class="botao">Adicionar à sequência</button>
+    </form>
+  </div>
+</div>
+
+<script>
+const form = document.getElementById('form-lead');
+const erroBox = document.getElementById('erro');
+
+form.addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  erroBox.style.display = 'none';
+
+  const dados = {
+    nome: document.getElementById('nome').value.trim(),
+    telefone: document.getElementById('telefone').value.trim(),
+    produto: document.getElementById('produto').value,
+  };
+
+  try {
+    const resp = await fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    });
+
+    if (!resp.ok) {
+      const corpo = await resp.json();
+      erroBox.textContent = corpo.erro || 'Não consegui adicionar esse lead.';
+      erroBox.style.display = 'block';
+      return;
+    }
+
+    window.location.href = '/index.html';
+  } catch (erro) {
+    erroBox.textContent = 'Não consegui falar com o servidor agora.';
+    erroBox.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>
