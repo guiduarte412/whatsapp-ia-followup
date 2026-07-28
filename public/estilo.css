@@ -22,7 +22,13 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  min-height: 100vh;
+  background-image:
+    linear-gradient(rgba(15,28,19,0.35), rgba(15,28,19,0.55)),
+    url('https://image.typedream.com/cdn-cgi/image/width=1920,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/355IjjONlsLJ4MvBDWafE0L8TYz_background_ajst.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
@@ -37,16 +43,14 @@ a { color: inherit; }
 }
 
 /* --- Hero / cabecalho com a identidade da FourAgro --- */
+/* O fundo agora e da pagina inteira (ver `body`) - o header so aplica um
+   verniz escuro por cima, na mesma imagem, pra manter o texto legivel. */
 
 header.hero {
   position: relative;
   margin-bottom: 32px;
   padding: 28px 24px 24px;
-  background-image:
-    linear-gradient(135deg, rgba(15,28,19,0.90), rgba(23,38,28,0.72)),
-    url('https://image.typedream.com/cdn-cgi/image/width=1920,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/355IjjONlsLJ4MvBDWafE0L8TYz_background_ajst.png');
-  background-size: cover;
-  background-position: center;
+  background: linear-gradient(135deg, rgba(15,28,19,0.55), rgba(23,38,28,0.35));
   color: #fff;
 }
 
@@ -123,8 +127,19 @@ header.hero .acoes {
 .botao.claro:hover { background: var(--forest-dark); }
 
 /* --- Lista de leads --- */
+/* Painel translucido (efeito vidro) pra deixar o fundo aparecer atras da
+   lista, mas mantendo o texto legivel por cima. */
 
-.lista { border-top: 1px solid var(--line); }
+.painel {
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 10px;
+  padding: 8px 16px 4px;
+}
+
+.lista { border-top: 1px solid rgba(28,43,34,0.15); }
 
 .linha-lead {
   display: grid;
@@ -132,12 +147,12 @@ header.hero .acoes {
   gap: 16px;
   align-items: center;
   padding: 16px 4px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(28,43,34,0.12);
   text-decoration: none;
   color: inherit;
   transition: background 0.12s ease;
 }
-.linha-lead:hover { background: rgba(184,134,59,0.08); }
+.linha-lead:hover { background: rgba(255,255,255,0.4); }
 
 .linha-lead .nome { font-weight: 600; }
 .linha-lead .telefone { font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); }
@@ -190,8 +205,10 @@ header.hero .acoes {
 /* --- Formulário --- */
 
 .cartao {
-  background: var(--bg-card);
-  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.6);
   border-radius: 6px;
   padding: 32px;
   max-width: 480px;
