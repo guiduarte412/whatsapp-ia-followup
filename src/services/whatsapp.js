@@ -36,7 +36,11 @@ async function avisarConsultor(texto) {
 // Formato padrao dos avisos que envolvem um lead - sempre com nome, numero
 // e horario, pra voce nao precisar abrir o painel pra saber quem e/quando.
 function formatarAvisoLead({ nome, telefone, contexto }) {
+  // Sem "timeZone" explicito, isso pegaria o horario do servidor (UTC no
+  // Railway), 3h adiantado do horario de Brasilia - mesmo problema
+  // corrigido no agendador.
   const horario = new Date().toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',

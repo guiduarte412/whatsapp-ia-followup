@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead } = require('../db/store');
+const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead, upsertLead } = require('../db/store');
 
 const router = express.Router();
 router.use(express.json({ limit: '2mb' }));
@@ -53,6 +53,15 @@ router.post('/leads/lote', (req, res) => {
 router.delete('/leads/:telefone', (req, res) => {
   removerLead(req.params.telefone);
   res.status(204).end();
+});
+
+// Forma garantida de encerrar o atendimento automatico - nao depende de
+// detectar nada vindo da Z-API, sempre funciona.
+router.post('/leads/:telefone/encerrar', (req, res) => {
+  const lead = getLead(req.params.telefone);
+  if (!lead) return res.status(404).json({ erro: 'lead nao encontrado' });
+  const atualizado = upsertLead(req.params.telefone, { status: 'encerrado', motivoEncerramento: 'assumido_manualmente' });
+  res.json(atualizado);
 });
 
 module.exports = router;

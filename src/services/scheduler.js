@@ -9,8 +9,12 @@ const { enviarMensagem, avisarConsultor, formatarAvisoLead } = require('./whatsa
 const HORAS_DESDE_INICIO = [5, 9, 24, 29, 48, 53];
 
 function dentroDoHorarioPermitido() {
-  const agora = new Date();
-  const hora = agora.getHours();
+  // O servidor (Railway) roda em UTC por padrao, nao no horario de Brasilia.
+  // Usar getHours() direto pegaria a hora errada - aqui calcula a hora
+  // especificamente no fuso do Brasil, nao importa onde o servidor roda.
+  const hora = Number(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }).format(new Date())
+  );
   const inicio = Number(process.env.HORARIO_INICIO || 8);
   const fim = Number(process.env.HORARIO_FIM || 20);
   return hora >= inicio && hora < fim;
@@ -31,7 +35,28 @@ async function processarLead(lead) {
     historico: lead.mensagensEnviadas || [],
   });
 
-  await enviarMensagem(lead.phone, mensagem);
+  try {
+    await enviarMensagem(lead.phone, mensagem);
+  } catch (erro) {
+    // Nao deixa a falha passar em silencio esperando o proximo tick (15 min)
+    // pra sempre - avisa uma vez (nao repete a cada tentativa) que esse
+    // lead esta com envio travado, pra voce poder investigar (Z-API caiu,
+    // credito da Anthropic acabou, etc).
+    if (!lead.avisoFalhaEnviado) {
+      upsertLead(lead.phone, { avisoFalhaEnviado: true });
+      await avisarConsultor(formatarAvisoLead({
+        nome: lead.nome,
+        telefone: lead.phone,
+        contexto: `O envio automático está falhando pra esse lead: ${erro.message}\nVai continuar tentando sozinho, mas vale conferir.`,
+      })).catch(() => {}); // se ate o aviso falhar, nao trava o resto do agendador
+    }
+    throw erro;
+  }
+
+  if (lead.avisoFalhaEnviado) {
+    upsertLead(lead.phone, { avisoFalhaEnviado: false });
+  }
+
   appendConversa(lead.phone, { de: 'ia', texto: mensagem });
 
   const mensagensEnviadas = [...(lead.mensagensEnviadas || []), mensagem];

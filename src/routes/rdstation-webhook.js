@@ -3,6 +3,10 @@ const { iniciarSequencia } = require('../db/store');
 
 const router = express.Router();
 
+function normalizarTelefone(valor) {
+  return (valor || '').toString().replace(/\D/g, '');
+}
+
 // Configure no RD Station CRM um Webhook disparado quando a negociacao/tarefa
 // muda para o estagio ou status que voce usa para marcar "nao atendeu"
 // (Configuracoes > Webhooks). O RD Station manda o payload em JSON.
@@ -11,13 +15,17 @@ const router = express.Router();
 router.post('/rdstation', express.json(), async (req, res) => {
   const payload = req.body;
 
-  const telefone = payload?.contact?.phone || payload?.phone;
+  // Normaliza pra só dígitos - o RD Station pode mandar formatado
+  // ("(51) 99283-2620"), e todo o resto do sistema (Z-API, site) trabalha
+  // só com dígitos. Sem isso, o mesmo lead podia ficar salvo com dois
+  // "telefones" diferentes e o sistema nunca reconhecer a resposta dele.
+  const telefone = normalizarTelefone(payload?.contact?.phone || payload?.phone);
   const nome = payload?.contact?.name || payload?.name;
   const produto = payload?.deal?.campaign || payload?.deal?.origin || 'nao informado';
   const statusNaoAtendeu = payload?.deal?.status === 'nao_atendeu'; // AJUSTAR ao seu funil
 
-  if (!telefone) {
-    return res.status(400).json({ erro: 'telefone nao encontrado no payload' });
+  if (!telefone || telefone.length < 12) {
+    return res.status(400).json({ erro: 'telefone nao encontrado ou invalido no payload' });
   }
 
   if (statusNaoAtendeu) {

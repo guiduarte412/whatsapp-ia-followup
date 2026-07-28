@@ -15,6 +15,10 @@ function normalizarTelefone(valor) {
   return (valor || '').toString().replace(/\D/g, '');
 }
 
+function normalizarTexto(valor) {
+  return (valor || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 // Configure essa URL como "webhook de mensagens recebidas" no painel da Z-API.
 // O formato exato do payload pode variar por versao da Z-API - confira a
 // documentacao atual e ajuste os campos abaixo se necessario.
@@ -25,13 +29,8 @@ router.post('/whatsapp', express.json(), async (req, res) => {
   // logs do Railway (Deployments -> View Logs) e ajustar os campos abaixo.
   console.log('Webhook WhatsApp recebido:', JSON.stringify(payload));
 
-  // telefoneRecebido: exatamente o que a Z-API mandou agora - usado pra
-  // responder (formato que ela acabou de confirmar que alcança o chat).
-  // telefoneLead (definido abaixo): o numero que ja esta salvo no lead -
-  // usado em todas as operacoes de banco, pra nunca duplicar o registro
-  // por causa do 9º digito (ver getLeadFlexivel).
   const telefoneRecebido = normalizarTelefone(payload?.phone || payload?.from);
-  const textoRecebido = payload?.text?.message || payload?.message;
+  const textoRecebido = payload?.text?.message || payload?.message || '[mensagem sem texto - provavelmente áudio, imagem ou figurinha]';
 
   if (!telefoneRecebido) return res.status(400).json({ erro: 'telefone nao encontrado no payload' });
 
@@ -43,16 +42,43 @@ router.post('/whatsapp', express.json(), async (req, res) => {
 
   const telefoneLead = lead.phone;
 
+  // "fromMe: true" quer dizer que a mensagem saiu do proprio numero
+  // conectado - tanto faz se foi a IA respondendo automaticamente quanto
+  // voce digitando manualmente no seu celular. Melhor esforco pra
+  // distinguir: se o texto bate com a ultima mensagem que a propria IA
+  // registrou pra esse lead, e so o eco do que ja mandamos - ignora. Se
+  // for diferente, e voce escrevendo por fora - encerra o atendimento
+  // automatico (voce assumiu). Isso e deteccao por aproximacao; se preferir
+  // uma forma garantida, use o botao "Assumir conversa" na pagina do lead.
+  if (payload?.fromMe === true) {
+    const ultimaDaIA = [...(lead.conversa || [])].reverse().find((m) => m.de === 'ia');
+    const ehEcoDaIA = ultimaDaIA && normalizarTexto(ultimaDaIA.texto) === normalizarTexto(textoRecebido);
+
+    // So fecha automaticamente quando da pra comparar com uma mensagem da
+    // IA conhecida e ela for diferente. Sem essa mensagem de referencia
+    // (ultimaDaIA ausente), e mais seguro nao fechar sozinho do que
+    // arriscar fechar por engano.
+    if (ultimaDaIA && !ehEcoDaIA && ['sequence_active', 'conversa_ia', 'cold_nurture'].includes(lead.status)) {
+      appendConversa(telefoneLead, { de: 'ia', texto: textoRecebido });
+      upsertLead(telefoneLead, { status: 'encerrado', motivoEncerramento: 'assumido_manualmente' });
+      console.log(`Lead ${telefoneLead} encerrado - mensagem manual detectada do numero conectado.`);
+    }
+    return res.status(200).json({ ok: true });
+  }
+
   try {
-    // Se ja esta com humano, a IA nao interfere mais - so avisa que chegou
-    // mensagem nova, pra nao atropelar uma conversa que o consultor ja assumiu.
-    if (lead.status === 'human_handoff') {
+    // Se ja esta com humano ou ja foi encerrado, a IA nao interfere mais -
+    // so avisa que chegou mensagem nova (exceto se ja encerrado, ai so
+    // registra sem incomodar - o atendimento por aqui acabou).
+    if (lead.status === 'human_handoff' || lead.status === 'encerrado') {
       appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
-      await avisarConsultor(formatarAvisoLead({
-        nome: lead.nome,
-        telefone: telefoneLead,
-        contexto: `Nova mensagem: "${textoRecebido}"`,
-      }));
+      if (lead.status === 'human_handoff') {
+        await avisarConsultor(formatarAvisoLead({
+          nome: lead.nome,
+          telefone: telefoneLead,
+          contexto: `Nova mensagem: "${textoRecebido}"`,
+        }));
+      }
       return res.status(200).json({ ok: true });
     }
 
@@ -95,15 +121,37 @@ router.post('/whatsapp', express.json(), async (req, res) => {
       historicoConversa: leadAtualizado.conversa,
     });
 
-    // Manda a resposta pro lead em qualquer um dos dois casos - a IA sempre
-    // deixa uma mensagem educada antes de encaminhar, nunca some sem responder.
-    // Usa telefoneRecebido pra enviar (formato que a Z-API acabou de confirmar).
+    // Manda a resposta pro lead em qualquer um dos casos - a IA sempre
+    // deixa uma mensagem educada antes de encaminhar ou encerrar, nunca
+    // some sem responder. Usa telefoneRecebido pra enviar (formato que a
+    // Z-API acabou de confirmar).
     if (resultado.resposta) {
-      await enviarMensagem(telefoneRecebido, resultado.resposta);
-      appendConversa(telefoneLead, { de: 'ia', texto: resultado.resposta });
+      try {
+        await enviarMensagem(telefoneRecebido, resultado.resposta);
+        appendConversa(telefoneLead, { de: 'ia', texto: resultado.resposta });
+      } catch (erroEnvio) {
+        // Se nao conseguir mandar a resposta, o lead fica sem retorno - isso
+        // e grave o suficiente pra avisar direto, em vez de so registrar log.
+        upsertLead(telefoneLead, { status: 'human_handoff', respostasAutomaticas });
+        await avisarConsultor(formatarAvisoLead({
+          nome: lead.nome,
+          telefone: telefoneLead,
+          contexto: `A IA tentou responder mas o envio falhou: ${erroEnvio.message}\nAssuma essa conversa manualmente.\nÚltima mensagem do lead: "${textoRecebido}"`,
+        })).catch(() => {});
+        return res.status(200).json({ ok: true });
+      }
     }
 
-    if (resultado.encaminharHumano) {
+    if (resultado.horarioConfirmado) {
+      // O proprio consultor (a IA falando por ele) ja aprovou um horario -
+      // encerra o atendimento automatico e sai da lista de leads ativos.
+      upsertLead(telefoneLead, { status: 'encerrado', motivoEncerramento: 'horario_confirmado', respostasAutomaticas });
+      await avisarConsultor(formatarAvisoLead({
+        nome: lead.nome,
+        telefone: telefoneLead,
+        contexto: `Horário confirmado com o lead: ${resultado.resumoParaConsultor || resultado.resposta}\nAtendimento automático encerrado - adicione na sua agenda.`,
+      }));
+    } else if (resultado.encaminharHumano) {
       upsertLead(telefoneLead, { status: 'human_handoff', respostasAutomaticas });
       const contexto = resultado.resumoParaConsultor || resultado.motivo || 'a IA identificou que é hora de assumir';
       await avisarConsultor(formatarAvisoLead({

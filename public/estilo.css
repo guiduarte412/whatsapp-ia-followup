@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
   --laranja: #E8734A;
@@ -11,8 +11,8 @@
   --texto-fraco: rgba(255,255,255,0.65);
   --alerta: #E85C4A;
 
-  --font-display: 'Fraunces', serif;
-  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 }
 
@@ -224,6 +224,7 @@ header.hero .acoes {
 .status.conversa_ia .ponto { background: var(--branco); }
 .status.human_handoff .ponto { background: var(--alerta); }
 .status.cold_nurture .ponto { background: var(--texto-fraco); }
+.status.encerrado .ponto { background: var(--texto-fraco); }
 
 .progresso { display: flex; gap: 4px; }
 .progresso .bola { width: 7px; height: 7px; border-radius: 50%; background: var(--linha); }
@@ -360,4 +361,15 @@ h2 {
   #sim-input-area input { flex: none; width: 100%; }
   #sim-input-area button { width: 100%; }
   body { background-attachment: scroll; }
+}
+
+/* --- Impressão do relatório diário --- */
+@media print {
+  header.hero, .barra-ferramentas, .voltar, .acoes { display: none !important; }
+  body { background: #fff !important; color: #000 !important; }
+  #relatorio-titulo-impressao { display: block !important; color: #000; }
+  .painel { background: #fff !important; backdrop-filter: none !important; border-color: #ccc !important; }
+  .linha-lead, .cabecalho-lista { border-color: #ccc !important; }
+  .nome, .status, span { color: #000 !important; }
+  .status .ponto { background: #000 !important; }
 }

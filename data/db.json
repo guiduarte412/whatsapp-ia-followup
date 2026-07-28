@@ -9,5 +9,6 @@
     "geral": ""
   },
   "codigoAcesso": "059597",
-  "crmConfig": {}
+  "crmConfig": {},
+  "googleAgenda": { "querConectar": false }
 }

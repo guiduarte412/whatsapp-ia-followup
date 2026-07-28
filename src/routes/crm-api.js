@@ -1,5 +1,5 @@
 const express = require('express');
-const { getCrmConfig, salvarCrmConfig } = require('../db/store');
+const { getCrmConfig, salvarCrmConfig, getGoogleAgendaConfig, salvarGoogleAgendaConfig } = require('../db/store');
 
 const router = express.Router();
 router.use(express.json());
@@ -22,6 +22,18 @@ router.post('/crm', (req, res) => {
   }
   salvarCrmConfig(dados);
   res.json({ ok: true });
+});
+
+// Google Agenda ainda nao conecta de verdade (precisa de autorizacao OAuth
+// do Google, que e um fluxo a parte) - por enquanto so guarda a intencao.
+router.get('/google-agenda', (req, res) => {
+  res.json(getGoogleAgendaConfig());
+});
+
+router.post('/google-agenda', (req, res) => {
+  const querConectar = Boolean(req.body?.querConectar);
+  const config = salvarGoogleAgendaConfig({ querConectar });
+  res.json(config);
 });
 
 module.exports = router;

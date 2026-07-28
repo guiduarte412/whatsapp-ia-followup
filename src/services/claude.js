@@ -5,7 +5,7 @@ const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const CONSULTOR_NOME = process.env.CONSULTOR_NOME || 'Guilherme';
 const CONSULTOR_EMPRESA = process.env.CONSULTOR_EMPRESA || 'Fourcon | FourAgro';
 
-// Le o texto livre que o consultor escreveu no site (pagina /topicos.html)
+// Le o texto livre que o consultor escreveu no site (aba "Editar topicos")
 // pra aquele segmento de produto. E esse texto que vira referencia de
 // conteudo pra IA - nada estruturado, e so o que ele escreveu mesmo.
 function textoDosTopicos(produto) {
@@ -20,7 +20,7 @@ function textoDosTopicos(produto) {
 
   return valor && valor.trim()
     ? `Como mencionar o produto (bem por cima, so pra situar o lead - os detalhes ficam pra ligacao):\n${valor.trim()}`
-    : 'Nenhuma descricao basica cadastrada para este produto ainda (pagina /topicos.html no site) - so peça o horario pra ligar, sem citar detalhes do produto.';
+    : 'Nenhuma descricao basica cadastrada para este produto ainda (aba "Editar topicos" no site) - so peça o horario pra ligar, sem citar detalhes do produto.';
 }
 
 // Exemplo real de mensagem que o consultor ja mandou - usado como referencia
@@ -30,38 +30,54 @@ Aqui é o ${CONSULTOR_NOME}, da ${CONSULTOR_EMPRESA}.
 Recebi sua solicitação de crédito rural e vou acompanhar seu atendimento.
 Podemos fazer uma ligação de 10 minutos para entender sua necessidade e encontrar a melhor solução? Se preferir, me informe o melhor horário que eu ligo."`;
 
-// O objetivo de TODA mensagem por WhatsApp e marcar uma ligacao ou reuniao/
-// chamada de video - os detalhes do consorcio (valores, prazos, condicoes)
-// so sao explicados ao vivo, nunca por texto. Isso vale tanto pra sequencia
-// inicial (gerarMensagem) quanto pra conversa continuada (responderConversa).
-const OBJETIVO_BASE = `O objetivo de toda mensagem e conseguir marcar uma ligacao ou reuniao/chamada
-de video com o lead - NUNCA explicar o consorcio em detalhe por texto. Mencione o produto de forma
-bem basica (ex: "sobre o consorcio de imoveis que voce se interessou") e direcione para uma
-conversa por voz/video, onde o consultor explica tudo. Se o lead pedir detalhes de valor, prazo ou
-condicao, a resposta certa e oferecer explicar isso numa ligacao rapida - nao tentar explicar por
-mensagem.
+// IDENTIDADE: a IA NUNCA e uma assistente ou uma "IA de atendimento" falando
+// EM NOME de alguem - ela escreve como se FOSSE literalmente o consultor,
+// sempre primeira pessoa ("eu"), nunca menciona "o consultor" como se fosse
+// uma terceira pessoa (nem mesmo quando vai encaminhar algo pra ele).
+const IDENTIDADE = `Você é ${CONSULTOR_NOME}, consultor financeiro brasileiro especializado em consórcio
+(segmentos: agro/rural, imóveis, caminhões/veículos pesados e crédito empresarial) da ${CONSULTOR_EMPRESA}.
+Você está respondendo mensagens de WhatsApp pessoalmente, em primeira pessoa - "eu", nunca "o
+consultor" ou "nosso consultor" como se fosse outra pessoa. Você NÃO é uma assistente, secretária ou
+IA de atendimento representando alguém: você ESCREVE COMO SE FOSSE ${CONSULTOR_NOME} mesmo, sempre.
 
-Escreva no estilo do consultor. Exemplo real de uma mensagem dele (use como referencia de tom,
-formalidade e estrutura - nao copie literalmente, cada mensagem e de um lead/situacao diferente):
+Tom: formal e profissional, mais formal que informal - trate o lead com cordialidade e respeito,
+evite gírias, diminutivos ("minutinho", "rapidinho") e informalidade excessiva. Frases completas,
+bem escritas, sem soar frio ou robótico.`;
+
+// O objetivo de TODA mensagem por WhatsApp e conseguir marcar uma ligacao ou
+// reuniao/chamada de video - os detalhes do consorcio (valores, prazos,
+// condicoes) so sao explicados ao vivo, nunca por texto. Isso vale tanto pra
+// sequencia inicial (gerarMensagem) quanto pra conversa continuada
+// (responderConversa).
+const OBJETIVO_BASE = `${IDENTIDADE}
+
+O objetivo de toda mensagem e conseguir marcar uma ligação ou reunião/chamada de vídeo com o lead -
+NUNCA explicar o consórcio em detalhe por texto. Mencione o produto de forma bem básica (ex: "sobre
+o consórcio de imóveis que você se interessou") e direcione para uma conversa por voz/vídeo, onde
+você explica tudo. Se o lead pedir detalhes de valor, prazo ou condição, a resposta certa é oferecer
+explicar isso numa ligação - não tentar explicar por mensagem.
+
+Escreva no seu próprio estilo. Exemplo real de uma mensagem sua (use como referência de tom,
+formalidade e estrutura - não copie literalmente, cada mensagem é de um lead/situação diferente):
 ${EXEMPLO_REAL_DE_TOM}
 
-Regra critica sobre contemplacao: NUNCA prometa, insinue ou de a entender que a contemplacao
-(sorteio ou lance) esta garantida, e um prazo certo, ou e "rapida"/"facil". Contemplacao em
-consorcio e sempre incerta - depende de sorteio ou lance. Isso vale mesmo se o lead perguntar
+Regra crítica sobre contemplação: NUNCA prometa, insinue ou dê a entender que a contemplação
+(sorteio ou lance) está garantida, tem um prazo certo, ou é "rápida"/"fácil". Contemplação em
+consórcio é sempre incerta - depende de sorteio ou lance. Isso vale mesmo se o lead perguntar
 diretamente ou insistir.`;
 
 // Numero da tentativa (1 a 6) define o tom da mensagem.
 // Isso implementa a cadencia: 2 mensagens/dia por 3 dias.
 const TOM_POR_TENTATIVA = {
-  1: `Primeira tentativa depois da ligacao nao atendida. Siga a estrutura do exemplo real: saudacao,
-se apresente como ${CONSULTOR_NOME} da ${CONSULTOR_EMPRESA}, mencione que recebeu a solicitacao do
-lead pra aquele produto especifico, peca uma ligacao curta (pode estimar 10 minutos) pra entender a
-necessidade, e ofereca flexibilidade de horario.`,
-  2: 'Segunda tentativa, ainda no mesmo dia da primeira. Nao precisa se reapresentar. Seja breve, so reforce a disponibilidade pra ligar, sem parecer insistente.',
-  3: 'Terceiro contato, novo dia. Pergunte de outro jeito se um horario pra falar rapido por telefone funciona pra ele.',
-  4: 'Quarto contato. Tom leve, uma pergunta direta e curta sobre o melhor horario, sem repetir o que ja foi dito antes.',
-  5: 'Quinto contato, ultimo dia da sequencia. Reforce que e rapido e sem compromisso, so pra entender a necessidade dele.',
-  6: 'Sexta e ultima mensagem da sequencia. Feche com gentileza: avise que essa e a ultima tentativa por aqui e que o lead pode chamar quando quiser.',
+  1: `Primeira tentativa depois da ligação não atendida. Siga a estrutura do exemplo real: saudação,
+se apresente como ${CONSULTOR_NOME} da ${CONSULTOR_EMPRESA}, mencione que recebeu a solicitação do
+lead pra aquele produto específico, peça uma ligação (pode estimar 10 minutos) pra entender a
+necessidade, e ofereça flexibilidade de horário.`,
+  2: 'Segunda tentativa, ainda no mesmo dia da primeira. Não precisa se reapresentar. Seja breve, só reforce a disponibilidade pra ligar, sem parecer insistente.',
+  3: 'Terceiro contato, novo dia. Pergunte de outro jeito se um horário pra falar rapidamente por telefone funciona pra ele.',
+  4: 'Quarto contato. Tom leve porém formal, uma pergunta direta e curta sobre o melhor horário, sem repetir o que já foi dito antes.',
+  5: 'Quinto contato, último dia da sequência. Reforce que é rápido e sem compromisso, só pra entender a necessidade dele.',
+  6: 'Sexta e última mensagem da sequência. Feche com cordialidade: avise que essa é a última tentativa por aqui e que o lead pode entrar em contato quando quiser.',
 };
 
 // Chamada compartilhada pra API da Claude. Se falhar, o erro devolvido
@@ -97,6 +113,11 @@ async function chamarClaude(systemPrompt, userPrompt, maxTokens) {
 }
 
 async function gerarMensagem({ leadNome, produto, tentativa, historico }) {
+  // Trava a tentativa entre 1 e 6 - protege contra um valor invalido vindo
+  // de fora (ex: API de teste) fazer o prompt referenciar uma instrucao
+  // que nao existe.
+  const tentativaValida = Math.min(6, Math.max(1, Number(tentativa) || 1));
+
   const exemplosBons = getRecentSuccessfulExamples(4);
 
   const exemplosTexto = exemplosBons.length
@@ -107,30 +128,26 @@ async function gerarMensagem({ leadNome, produto, tentativa, historico }) {
 
   const topicosTexto = textoDosTopicos(produto);
 
-  const systemPrompt = `Voce escreve mensagens de WhatsApp para um consultor financeiro brasileiro
-especializado em consorcio (segmentos: agro/rural, imoveis, caminhoes/veiculos pesados e credito empresarial).
+  const systemPrompt = `${OBJETIVO_BASE}
 
-Contexto: o consultor ja ligou para o lead e nao conseguiu atendimento. Seu papel e escrever
-UMA mensagem curta, humana e natural (nunca robotica, nunca com cara de disparo em massa).
-
-${OBJETIVO_BASE}
+Contexto: você acabou de ligar para esse lead e não conseguiu atendimento. Escreva UMA mensagem
+curta, humana e natural (nunca robótica, nunca com cara de disparo em massa).
 
 Regras:
-- Maximo 3-4 linhas.
-- Nunca usar linguagem de spam ("promocao imperdivel", excesso de emoji, tudo em maiusculas).
-- Termine perguntando um horario pra ligar ou conversar - esse e sempre o proximo passo.
-- Varie a abordagem de acordo com o numero da tentativa (instrucao abaixo).
-- Escreva como se fosse o proprio consultor digitando, em primeira pessoa.
-- Nao invente informacoes sobre condicoes, valores ou prazos que nao foram fornecidos.
+- Máximo 3-4 linhas.
+- Nunca usar linguagem de spam ("promoção imperdível", excesso de emoji, tudo em maiúsculas).
+- Termine perguntando um horário pra ligar ou conversar - esse é sempre o próximo passo.
+- Varie a abordagem de acordo com o número da tentativa (instrução abaixo).
+- Não invente informações sobre condições, valores ou prazos que não foram fornecidos.
 
-Instrucao para esta tentativa (${tentativa} de 6): ${TOM_POR_TENTATIVA[tentativa]}
+Instrução para esta tentativa (${tentativaValida} de 6): ${TOM_POR_TENTATIVA[tentativaValida]}
 
 ${topicosTexto}
 
-Exemplos de mensagens que funcionaram bem no passado (use como referencia de tom, nao copie literalmente):
+Exemplos de mensagens que funcionaram bem no passado (use como referência de tom, não copie literalmente):
 ${exemplosTexto}
 
-Responda APENAS com o texto da mensagem, sem aspas, sem explicacoes.`;
+Responda APENAS com o texto da mensagem, sem aspas, sem explicações.`;
 
   const userPrompt = `Lead: ${leadNome || 'sem nome informado'}
 Produto de interesse: ${produto || 'nao informado'}
@@ -141,16 +158,19 @@ Historico de mensagens ja enviadas nesta sequencia: ${historico?.length ? histor
 
 // Continua a conversa depois que o lead responde. Diferente do
 // gerarMensagem (que so manda mensagem "as cegas"), aqui a IA le o que o
-// lead escreveu e decide, a cada turno, se responde ela mesma ou se
-// encaminha pro humano - nunca as duas coisas ao mesmo tempo.
+// lead escreveu e decide, a cada turno, entre tres caminhos:
+// 1) continuar a conversa ela mesma
+// 2) encaminhar pro consultor humano (duvida de valor, quer falar com
+//    pessoa, quer fechar negocio)
+// 3) confirmar um horario que o lead propos/aceitou e ENCERRAR o
+//    atendimento (o proprio ${CONSULTOR_NOME} aprova o horario, em primeira
+//    pessoa - nao pede aprovacao de ninguem)
 async function responderConversa({ leadNome, produto, historicoConversa }) {
   const topicosTexto = textoDosTopicos(produto);
 
-  const systemPrompt = `Você é a IA de atendimento inicial de um consultor financeiro brasileiro
-especializado em consórcio (segmentos: agro/rural, imóveis, caminhões/veículos pesados e crédito
-empresarial). Você está conversando por WhatsApp com um lead que respondeu ao contato.
+  const systemPrompt = `${OBJETIVO_BASE}
 
-${OBJETIVO_BASE}
+Você está conversando por WhatsApp com um lead que respondeu ao seu contato.
 
 ${topicosTexto}
 
@@ -160,33 +180,36 @@ Regras rígidas, sem exceção:
   na lista de tópicos.
 - NUNCA prometa, insinue ou dê a entender que a contemplação (sorteio ou lance) está garantida,
   tem prazo certo, ou é "rápida"/"fácil" - contemplação é sempre incerta. Se o lead perguntar
-  sobre contemplação, não responda por texto - encaminhe para o consultor.
+  sobre contemplação, não responda por texto - encaminhe (é assunto pra explicar ao vivo).
 - NUNCA confirme fechamento de negócio, nem diga que "está aprovado" ou "garantido".
-- NUNCA prometa ou confirme um horário de ligação em nome do consultor - você não sabe a
-  agenda dele. Se o lead propuser ou aceitar um horário para ser contatado, agradeça e diga que
-  vai confirmar com o consultor, mas encaminhe para o humano (é ele quem confirma o horário).
-- Se o lead pedir qualquer detalhe de valor/condição, OU perguntar sobre contemplação, OU
-  pedir para falar com uma pessoa, OU demonstrar que já quer fechar negócio, OU propuser/aceitar
-  um horário de contato, você deve encaminhar para o consultor humano em vez de tentar resolver
-  por texto.
-- Mesmo quando for encaminhar, sempre responda algo educado ao lead antes (nunca deixe ele sem
-  resposta) - só não avance a negociação nem confirme compromissos que não são seus para confirmar.
-- Fora dessas situações, converse normalmente: tire dúvidas bem gerais, mantenha o interesse, tom
-  humano e direto, em primeira pessoa (como se fosse o próprio consultor digitando), mensagens
-  curtas (2-3 linhas), sempre puxando para marcar a ligação/reunião.
+- Quando o lead propuser ou aceitar um horário pra ligação/reunião: APROVE você mesmo, em primeira
+  pessoa, sem pedir aprovação de mais ninguém (ex: "Perfeito, te ligo nesse horário então!"). Isso
+  encerra o atendimento por aqui - marque "horario_confirmado": true. Você está confirmando sua
+  própria agenda, não a de outra pessoa.
+- Se o lead pedir qualquer detalhe de valor/condição, OU perguntar sobre contemplação, OU pedir
+  para falar com uma pessoa (fora o próprio contato que já está tendo com você), OU demonstrar que
+  já quer fechar negócio, marque "encaminhar_humano": true - esses casos precisam de você ao vivo,
+  não por mensagem.
+- Nunca marque "horario_confirmado" e "encaminhar_humano" como true ao mesmo tempo - é sempre um
+  ou outro, ou nenhum dos dois (segue a conversa normal).
+- Em qualquer um dos casos acima, sempre responda algo educado ao lead antes (nunca deixe ele sem
+  resposta) - só não avance a negociação nem confirme algo que exige uma ligação pra ser resolvido
+  de verdade.
+- Fora dessas situações, converse normalmente: tire dúvidas bem gerais, mantenha o interesse,
+  mensagens curtas (2-3 linhas), sempre puxando para marcar a ligação/reunião.
 
 Responda SOMENTE com um JSON válido, neste formato exato, sem nenhum texto antes ou depois:
-{"resposta": "texto da mensagem para o lead (sempre preenchido)", "encaminhar_humano": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto pro consultor saber o que fazer ao assumir (ex: horário proposto, dúvida pendente), só se encaminhar_humano for true"}`;
+{"resposta": "texto da mensagem para o lead (sempre preenchido)", "encaminhar_humano": true ou false, "horario_confirmado": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto (ex: horário confirmado, dúvida pendente), se encaminhar_humano OU horario_confirmado forem true"}`;
 
   const userPrompt = `Lead: ${leadNome || 'sem nome informado'}
 Produto de interesse: ${produto || 'não informado'}
 Histórico da conversa (mais antiga primeiro):
-${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : 'Consultor (IA)'}: ${m.texto}`).join('\n')}`;
+${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : CONSULTOR_NOME}: ${m.texto}`).join('\n')}`;
 
   const textoCru = await chamarClaude(systemPrompt, userPrompt, 300);
 
   try {
-    //As vezes o modelo devolve o JSON dentro de um bloco ```json ... ```
+    // As vezes o modelo devolve o JSON dentro de um bloco ```json ... ```
     // ou com algum texto solto antes/depois, mesmo com instrucao pra nao
     // fazer isso. Em vez de exigir JSON puro, extrai só o trecho entre a
     // primeira { e a ultima } antes de tentar interpretar.
@@ -195,9 +218,19 @@ ${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : 'Consultor (IA)'}: 
     const jsonLimpo = inicio !== -1 && fim !== -1 ? textoCru.slice(inicio, fim + 1) : textoCru;
 
     const parsed = JSON.parse(jsonLimpo);
+
+    // A regra e a IA sempre deixar uma resposta pro lead, mesmo quando vai
+    // encaminhar ou encerrar. Se por algum motivo o JSON vier valido mas
+    // sem texto de resposta, trata como formato inesperado - melhor
+    // encaminhar por seguranca do que deixar o lead sem nenhuma mensagem.
+    if (!parsed.resposta || !parsed.resposta.trim()) {
+      throw new Error('resposta vazia');
+    }
+
     return {
       resposta: parsed.resposta,
-      encaminharHumano: Boolean(parsed.encaminhar_humano),
+      encaminharHumano: Boolean(parsed.encaminhar_humano) && !parsed.horario_confirmado,
+      horarioConfirmado: Boolean(parsed.horario_confirmado),
       motivo: parsed.motivo || null,
       resumoParaConsultor: parsed.resumo_para_consultor || null,
     };
@@ -207,6 +240,7 @@ ${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : 'Consultor (IA)'}: 
     return {
       resposta: null,
       encaminharHumano: true,
+      horarioConfirmado: false,
       motivo: 'Resposta da IA em formato inesperado - encaminhado por segurança.',
       resumoParaConsultor: null,
     };

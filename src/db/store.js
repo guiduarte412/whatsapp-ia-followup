@@ -203,6 +203,21 @@ function salvarCrmConfig(dados) {
   return db.crmConfig;
 }
 
+// --- Preferência de conexão futura com o Google Agenda ---
+// Ainda não conecta de verdade (isso exige um fluxo de autorização do
+// Google) - por enquanto so guarda que voce quer ativar isso no futuro.
+
+function getGoogleAgendaConfig() {
+  return load().googleAgenda || { querConectar: false };
+}
+
+function salvarGoogleAgendaConfig(dados) {
+  const db = load();
+  db.googleAgenda = { ...(db.googleAgenda || {}), ...dados };
+  save(db);
+  return db.googleAgenda;
+}
+
 // --- Código de acesso pra ver os leads ---
 // A palavra-chave mestra (pra poder trocar o código) fica fixa no código
 // do servidor, nunca exposta ao navegador - só o resultado (certo/errado)
@@ -233,6 +248,8 @@ module.exports = {
   salvarTopicos,
   getCrmConfig,
   salvarCrmConfig,
+  getGoogleAgendaConfig,
+  salvarGoogleAgendaConfig,
   verificarCodigoAcesso,
   alterarCodigoAcesso,
   appendConversa,

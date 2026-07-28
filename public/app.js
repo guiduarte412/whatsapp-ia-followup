@@ -4,6 +4,7 @@ const LABELS_STATUS = {
   conversa_ia: 'IA conversando',
   human_handoff: 'Aguardando você',
   cold_nurture: 'Nutrição futura',
+  encerrado: 'Encerrado',
 };
 const LABELS_PRODUTO = {
   agro: 'Agro/rural',
@@ -59,11 +60,13 @@ function rotear() {
   if (view === 'lead' && param) {
     mostrarView('lead');
     carregarDetalheLead(param);
-  } else if (['novo', 'testar', 'topicos', 'codigo', 'crm', 'relatorio'].includes(view)) {
+  } else if (['novo', 'testar', 'topicos', 'codigo', 'crm', 'relatorio', 'agenda', 'metricas'].includes(view)) {
     mostrarView(view);
     if (view === 'topicos') carregarTopicos();
     if (view === 'crm') carregarCrm();
     if (view === 'relatorio') prepararRelatorio();
+    if (view === 'agenda') carregarAgenda();
+    if (view === 'metricas') carregarMetricas();
   } else {
     mostrarView('leads');
     carregarLeads();
@@ -87,7 +90,9 @@ async function carregarLeads() {
   const lista = document.getElementById('lista');
   try {
     const resp = await fetch('/api/leads');
-    const leads = await resp.json();
+    // Leads encerrados (horário confirmado ou você assumiu manualmente)
+    // saem da lista principal, mas continuam nos dados pro relatório.
+    const leads = (await resp.json()).filter((l) => l.status !== 'encerrado');
 
     if (!leads.length) {
       lista.innerHTML = '<div class="vazio">Nenhum lead ainda. Adicione o primeiro depois de uma ligação sem retorno.</div>';
@@ -232,7 +237,7 @@ document.getElementById('form-teste').addEventListener('submit', async (evento) 
     }
     document.getElementById('texto-gerado').textContent = corpo.texto;
     document.getElementById('resultado').style.display = 'block';
-    sucessoBox.textContent = 'Mensagem enviada para o número informado (com o prefixo [TESTE]).';
+    sucessoBox.textContent = 'Mensagem enviada para o número informado.';
     sucessoBox.style.display = 'block';
   } catch (erro) {
     erroBox.textContent = 'Não consegui falar com o servidor agora.';
@@ -463,6 +468,14 @@ async function carregarDetalheLead(telefone) {
         </div>
       `).join('');
 
+  const botaoAssumir = document.getElementById('btn-assumir-lead');
+  botaoAssumir.style.display = lead.status === 'encerrado' ? 'none' : 'inline-flex';
+  botaoAssumir.onclick = async () => {
+    if (!confirm('Encerrar o atendimento automático desse lead? A IA para de responder por aqui.')) return;
+    await fetch(`/api/leads/${encodeURIComponent(telefone)}/encerrar`, { method: 'POST' });
+    carregarDetalheLead(telefone);
+  };
+
   document.getElementById('btn-remover-lead').onclick = async () => {
     if (!confirm('Remover este lead? Isso apaga a conversa e não pode ser desfeito.')) return;
     await fetch(`/api/leads/${encodeURIComponent(telefone)}`, { method: 'DELETE' });
@@ -590,6 +603,11 @@ async function gerarRelatorio() {
 
 document.getElementById('btn-gerar-relatorio').addEventListener('click', gerarRelatorio);
 
+document.getElementById('btn-imprimir-relatorio').addEventListener('click', async () => {
+  if (!relatorioAtual.length) await gerarRelatorio();
+  window.print();
+});
+
 document.getElementById('btn-exportar-relatorio').addEventListener('click', async () => {
   if (!relatorioAtual.length) await gerarRelatorio();
   if (!relatorioAtual.length) return;
@@ -607,3 +625,65 @@ document.getElementById('btn-exportar-relatorio').addEventListener('click', asyn
   const data = document.getElementById('relatorio-data').value;
   XLSX.writeFile(livro, `relatorio-${data}.xlsx`);
 });
+
+// ===== VIEW: Google Agenda =====
+
+async function carregarAgenda() {
+  const resp = await fetch('/api/google-agenda');
+  const config = await resp.json();
+  document.getElementById('agenda-querconectar').checked = Boolean(config.querConectar);
+}
+
+document.getElementById('btn-salvar-agenda').addEventListener('click', async () => {
+  const querConectar = document.getElementById('agenda-querconectar').checked;
+  await fetch('/api/google-agenda', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ querConectar }),
+  });
+  const sucesso = document.getElementById('agenda-sucesso');
+  sucesso.textContent = 'Salvo.';
+  sucesso.style.display = 'block';
+  setTimeout(() => { sucesso.style.display = 'none'; }, 2500);
+});
+
+// ===== VIEW: métricas (taxa de retorno dos leads) =====
+
+function cartaoMetrica(valor, rotulo) {
+  return `
+    <div class="painel" style="padding: 20px; text-align:center;">
+      <div style="font-family: var(--font-display); font-size: 32px; font-weight: 600; color: var(--laranja);">${valor}</div>
+      <div style="font-size: 12px; color: var(--texto-fraco); margin-top:6px; text-transform:uppercase; letter-spacing:0.04em;">${rotulo}</div>
+    </div>
+  `;
+}
+
+async function carregarMetricas() {
+  const resp = await fetch('/api/leads');
+  const leads = await resp.json();
+  const container = document.getElementById('metricas-cartoes');
+
+  if (!leads.length) {
+    container.innerHTML = '<div class="vazio">Nenhum lead ainda.</div>';
+    return;
+  }
+
+  const total = leads.length;
+  // "Respondeu" = teve pelo menos uma mensagem do lead na conversa. Nao usa
+  // o status como atalho porque um lead pode ser encerrado manualmente
+  // (botao "Assumir conversa") mesmo sem nunca ter respondido.
+  const respondeu = leads.filter((l) => (l.conversa || []).some((m) => m.de === 'lead')).length;
+  // So conta como "reunião marcada" quem encerrou especificamente porque
+  // confirmou um horário - não qualquer encerramento (que também pode ser
+  // você assumindo manualmente por outro motivo).
+  const encerrados = leads.filter((l) => l.motivoEncerramento === 'horario_confirmado').length;
+  const semResposta = leads.filter((l) => l.status === 'cold_nurture').length;
+  const taxaRetorno = total ? Math.round((respondeu / total) * 100) : 0;
+
+  container.innerHTML = [
+    cartaoMetrica(total, 'Leads no total'),
+    cartaoMetrica(`${taxaRetorno}%`, 'Taxa de retorno'),
+    cartaoMetrica(encerrados, 'Reuniões marcadas'),
+    cartaoMetrica(semResposta, 'Sem resposta (6 tentativas)'),
+  ].join('');
+}

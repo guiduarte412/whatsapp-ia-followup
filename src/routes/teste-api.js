@@ -1,7 +1,7 @@
 const express = require('express');
 const { gerarMensagem, responderConversa } = require('../services/claude');
 const { enviarMensagem } = require('../services/whatsapp');
-const { iniciarSequencia, upsertLead } = require('../db/store');
+const { iniciarSequencia, upsertLead, appendConversa } = require('../db/store');
 
 const router = express.Router();
 router.use(express.json());
@@ -80,6 +80,7 @@ router.post('/testar-whatsapp', async (req, res) => {
     const lead = iniciarSequencia(telefone, { nome, produto, teste: true });
     const texto = await gerarMensagem({ leadNome: nome, produto, tentativa: 1, historico: [] });
     await enviarMensagem(telefone, texto);
+    appendConversa(telefone, { de: 'ia', texto });
     upsertLead(telefone, { attemptsSent: 1, mensagensEnviadas: [texto] });
     res.json({ texto, lead });
   } catch (erro) {

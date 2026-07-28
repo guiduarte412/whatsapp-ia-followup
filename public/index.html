@@ -23,8 +23,10 @@
     <div class="topo">
       <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
       <div class="acoes">
+        <a class="botao secundario" href="#metricas">Métricas</a>
         <a class="botao secundario" href="#relatorio">Relatório diário</a>
         <a class="botao secundario" href="#crm">CRM</a>
+        <a class="botao secundario" href="#agenda">Google Agenda</a>
         <a class="botao secundario" href="#topicos">Editar tópicos</a>
         <a class="botao secundario" href="#codigo">Código de acesso</a>
         <a class="botao" href="#novo">+ Novo lead</a>
@@ -235,7 +237,10 @@
         <h2 id="lead-nome" style="margin-top:0;">—</h2>
         <div id="lead-resumo"></div>
         <div class="conversa" id="lead-conversa"></div>
-        <button class="botao secundario" id="btn-remover-lead" style="margin-top:20px; border-color: rgba(232,92,74,0.6);">Remover lead</button>
+        <div style="display:flex; gap:10px; margin-top:20px; flex-wrap:wrap;">
+          <button class="botao claro" id="btn-assumir-lead">Assumir conversa (encerra a IA)</button>
+          <button class="botao secundario" id="btn-remover-lead" style="border-color: rgba(232,92,74,0.6);">Remover lead</button>
+        </div>
       </div>
     </section>
 
@@ -289,13 +294,16 @@
     <!-- VIEW: relatório diário -->
     <section id="view-relatorio" class="view" style="display:none;">
       <a class="voltar" href="#leads">← Voltar</a>
+      <h2 id="relatorio-titulo-impressao" style="display:none;">Relatório diário — Fourcon | FourAgro</h2>
       <p class="dica" style="margin: 0 0 20px;">
-        Resumo do que aconteceu num dia, pronto pra você repassar no CRM.
+        Resumo do que aconteceu num dia, pronto pra você repassar no CRM. Isso
+        nunca é enviado pro lead - é só pra sua consulta e impressão.
       </p>
       <div class="barra-ferramentas" style="margin-top:0;">
         <input type="date" id="relatorio-data" style="max-width: 200px;">
         <button class="botao claro" id="btn-gerar-relatorio">Gerar relatório</button>
         <button class="botao secundario" id="btn-exportar-relatorio">Exportar Excel</button>
+        <button class="botao secundario" id="btn-imprimir-relatorio">Imprimir</button>
       </div>
       <div class="painel">
         <div class="cabecalho-lista" style="grid-template-columns: 1.2fr 1fr 1fr 2fr;">
@@ -308,6 +316,34 @@
           <div class="vazio">Escolha uma data e clique em "Gerar relatório".</div>
         </div>
       </div>
+    </section>
+
+    <!-- VIEW: Google Agenda (preparação, ainda não conecta de verdade) -->
+    <section id="view-agenda" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <div class="cartao largo">
+        <h2 style="margin-top:0;">Google Agenda</h2>
+        <p class="dica" style="margin-top:0;">
+          Ainda não conecta de verdade — conectar o Google Agenda exige um
+          fluxo de autorização à parte (login com sua conta Google). Isso
+          marca que você quer essa conexão, pra ativarmos quando for construída.
+        </p>
+        <div class="sucesso" id="agenda-sucesso"></div>
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+          <input type="checkbox" id="agenda-querconectar" style="width:auto;">
+          Quero conectar meu Google Agenda automaticamente no futuro
+        </label>
+        <button class="botao claro" id="btn-salvar-agenda" style="margin-top:20px;">Salvar</button>
+      </div>
+    </section>
+
+    <!-- VIEW: métricas -->
+    <section id="view-metricas" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <p class="dica" style="margin: 0 0 20px;">
+        Visão geral de todos os leads (não filtra por data).
+      </p>
+      <div id="metricas-cartoes" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px;"></div>
     </section>
 
   </main>

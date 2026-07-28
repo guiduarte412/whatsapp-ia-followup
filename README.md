@@ -3,13 +3,15 @@
 Sistema que assume o follow-up de um lead **depois** que você já ligou e não
 conseguiu atendimento. Manda mensagem humanizada 2x por dia, por 3 dias (6
 mensagens no total). Se o lead responder, a IA continua a conversa sozinha
-dentro de limites bem definidos, e só te chama quando é hora de você entrar.
+(em primeira pessoa, como se fosse você mesmo escrevendo) dentro de limites
+bem definidos, e só te chama quando é hora de você entrar.
 
 ## O site
 
 O servidor serve um site único (uma página só, sem recarregar ao navegar),
 com a identidade visual da Fourcon | FourAgro — fundo com a foto real do
-site, paleta branco/preto/laranja.
+site, paleta branco/preto/laranja, tipografia moderna (Space Grotesk +
+Inter).
 
 **Acesso protegido por código:** ao abrir o site, pede um código de 6
 dígitos antes de mostrar qualquer coisa (padrão: `059597`). Pra trocar o
@@ -19,38 +21,51 @@ código fica salvo no Volume do Railway, sobrevive a deploys.
 
 Navegação (tudo na mesma página, cada seção com botão **"← Voltar"**):
 
-- **Leads** (tela inicial) — lista todos os leads, com status e progresso
-  da sequência. Tem **Exportar Excel** e **Importar Excel** (colunas
-  `Nome`, `Telefone`, `Produto`) pra criar vários leads de uma vez — mesmo
-  formato de planilha que você já usa pra outras listas de chamada.
+- **Leads** (tela inicial) — lista todos os leads **em andamento** (leads
+  encerrados saem daqui automaticamente, ver abaixo), com status e
+  progresso da sequência. Tem **Exportar Excel** e **Importar Excel**
+  (colunas `Nome`, `Telefone`, `Produto`) pra criar vários leads de uma
+  vez.
 - **+ Novo lead** — formulário pra adicionar um lead manualmente e já
   iniciar a sequência de follow-up. Alternativa ao webhook do RD Station.
-- **Testar mensagem** — três abas:
-  - **Mensagem única**: gera uma mensagem com a IA de verdade e manda pro
-    número que você informar (sem criar lead nem entrar na sequência real).
-  - **Conversa no WhatsApp**: cria um lead marcado com selo **TESTE** e já
-    manda a primeira mensagem pro número que você informar. Dali em diante
-    você responde normalmente pelo seu WhatsApp — a conversa segue o
-    caminho real (mesmo webhook que um lead de verdade usa).
-  - **Simular na tela**: mesma ideia, mas sem tocar no WhatsApp - você
-    digita o que o lead responderia e vê a IA reagir turno a turno.
-- **Editar tópicos** — uma caixa de texto por segmento (agro, imóveis,
-  caminhões, crédito empresarial) onde você escreve o que a IA pode
-  mencionar sobre cada produto. Salva na hora, sem precisar mexer em código.
-- **CRM** — guarda a chave da API do RD Station (ou outro CRM) e a URL base,
-  pra vincular futuramente. Por enquanto só fica salva (o site nunca devolve
-  a chave em claro depois de salva, só indica que existe uma) — nenhuma
-  integração automática usa isso ainda, é só a base pronta pra quando for
-  construída.
-- **Relatório diário** — escolhe uma data, gera um resumo por lead (novo
-  hoje, quantas mensagens foram enviadas, quantas respostas do lead, status
-  atual) e exporta em Excel — pronto pra repassar no CRM manualmente.
-- Clicar num lead na lista abre a conversa inteira, com botão **Remover
-  lead**.
+- **Testar mensagem** — três abas: Mensagem única, Conversa no WhatsApp
+  (cria lead de teste real, mesmo caminho de produção) e Simular na tela.
+- **Editar tópicos** — uma caixa de texto por segmento onde você escreve o
+  que a IA pode mencionar sobre cada produto.
+- **CRM** — guarda a chave da API do RD Station (ou outro CRM) e a URL
+  base, pra vincular futuramente. Não faz nenhuma chamada ainda.
+- **Google Agenda** — só marca que você quer conectar no futuro (conectar
+  de verdade exige um fluxo de autorização do Google que ainda não foi
+  construído).
+- **Métricas** — visão geral: total de leads, taxa de retorno (% que
+  respondeu), quantas reuniões foram marcadas, quantos ficaram sem
+  resposta.
+- **Relatório diário** — escolhe uma data, gera um resumo por lead e
+  exporta em Excel **ou imprime** (botão "Imprimir", usa a impressão do
+  navegador com um layout limpo, sem cores de fundo). Nunca é enviado
+  pro lead — é só pra sua consulta.
+- Clicar num lead na lista abre a conversa inteira, com botões **Assumir
+  conversa** (encerra a IA nesse lead, garantido) e **Remover lead**.
 
 Assim que a Fase 5 (Railway) estiver no ar, é só abrir a própria URL do
 serviço no navegador (`https://SEU-PROJETO.up.railway.app`) — o site já
 aparece ali, não precisa de nenhuma configuração extra.
+
+## Quando o atendimento automático encerra
+
+Um lead sai da lista principal (mas continua nos dados, pro relatório e
+métricas) quando:
+
+- **O lead confirma um horário de ligação/reunião** — a IA (falando como
+  você, em primeira pessoa) aprova o horário na hora, sem pedir permissão
+  pra ninguém, e o atendimento encerra. Você recebe um aviso com o
+  horário combinado.
+- **Você manda uma mensagem pelo próprio WhatsApp conectado** — detecção
+  por aproximação: se uma mensagem sair do número conectado e o texto for
+  diferente da última coisa que a IA mandou, entende que foi você
+  assumindo manualmente e encerra por ali. Como isso depende de como a
+  Z-API reporta o evento, não é 100% garantido — pra ter certeza, use o
+  botão **Assumir conversa** na página do lead, que sempre funciona.
 
 ## Avisos pro consultor
 
@@ -217,6 +232,32 @@ isso **antes** de importar sua primeira leva de leads reais.
    payload real que o RD Station manda na sua conta (o formato varia
    conforme como seu funil está montado).
 7. `npm start`.
+
+## Correções desta revisão
+
+Passei o projeto inteiro a limpo duas vezes procurando falhas. As mais importantes:
+
+- **Fuso horário errado em dois lugares** — a janela de 8h-20h e o horário
+  que aparece nos seus avisos estavam em UTC (horário do servidor), não em
+  Brasília. Ambos corrigidos.
+- **Número de telefone do RD Station não era normalizado** — se o RD
+  Station mandasse o número formatado, o lead ficava salvo diferente do
+  que a Z-API reconhece depois, quebrando a conversa.
+- **Mensagens que a própria IA manda podiam ser processadas como se
+  fossem do lead**, dependendo de como a Z-API relata o evento.
+- **O teste "Conversa no WhatsApp" não registrava a primeira mensagem no
+  histórico da conversa** — isso quebrava a detecção de "essa mensagem é
+  só o eco da própria IA" que uso pra saber quando você assumiu
+  manualmente, podendo encerrar o lead por engano assim que ele era criado.
+- **Métrica "Reuniões marcadas" contava qualquer lead encerrado**, mesmo
+  os que você fechou manualmente por outro motivo - agora só conta quando
+  o motivo registrado é realmente "horário confirmado".
+- **Se o envio de uma resposta falhasse, o lead ficava sem retorno e sem
+  ninguém saber** — agora você é avisado quando isso acontece.
+- **Tentativa de mensagem fora do intervalo 1-6 podia gerar um prompt
+  quebrado** — travado.
+- Um texto do site ainda mencionava o prefixo `[TESTE]` que eu já tinha
+  removido — corrigido.
 
 ## Estrutura do projeto
 
