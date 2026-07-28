@@ -11,11 +11,19 @@ function baseUrl() {
 }
 
 async function enviarMensagem(telefone, mensagem) {
-  return axios.post(
-    `${baseUrl()}/send-text`,
-    { phone: telefone, message: mensagem },
-    { headers: { 'Client-Token': process.env.ZAPI_CLIENT_TOKEN } }
-  );
+  try {
+    return await axios.post(
+      `${baseUrl()}/send-text`,
+      { phone: telefone, message: mensagem },
+      { headers: { 'Client-Token': process.env.ZAPI_CLIENT_TOKEN } }
+    );
+  } catch (erro) {
+    // A mensagem padrao do axios ("Request failed with status code 400")
+    // nao diz o motivo. O corpo da resposta da Z-API costuma ter o motivo
+    // de verdade (numero invalido, instancia desconectada, etc).
+    const detalhe = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+    throw new Error(`Z-API: ${detalhe}`);
+  }
 }
 
 // Aviso interno pro consultor (usa o mesmo canal, mandando pro proprio numero dele)

@@ -266,6 +266,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); outl
   gap: 4px;
   margin-bottom: 24px;
   border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .aba {
   padding: 10px 4px;
@@ -283,10 +285,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); outl
   font-family: var(--font-body);
 }
 .aba.ativa { color: var(--forest-dark); border-bottom-color: var(--gold); }
+.aba { white-space: nowrap; }
 
 @media (max-width: 640px) {
   .linha-lead, .cabecalho-lista { grid-template-columns: 1fr 1fr; }
   .linha-lead .telefone { display: none; }
   .cabecalho-lista > :nth-child(2) { display: none; }
   header.hero .conteudo { align-items: flex-start; }
+  header.hero h1 { font-size: 24px; }
+  .cartao { padding: 20px; }
+  .container { padding: 0 16px 60px; }
+  #sim-input-area { flex-direction: column; }
+  #sim-input-area input { flex: none; width: 100%; }
+  #sim-input-area button { width: 100%; }
+
+  /* fundo fixo trava/pisca em vários navegadores de celular - vira
+     fundo normal (rola junto) só nessa faixa de tela */
+  body { background-attachment: scroll; }
 }

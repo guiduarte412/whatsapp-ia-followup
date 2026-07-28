@@ -64,6 +64,38 @@ necessidade, e ofereca flexibilidade de horario.`,
   6: 'Sexta e ultima mensagem da sequencia. Feche com gentileza: avise que essa e a ultima tentativa por aqui e que o lead pode chamar quando quiser.',
 };
 
+// Chamada compartilhada pra API da Claude. Se falhar, o erro devolvido
+// inclui o motivo real que a Anthropic mandou (chave invalida, modelo
+// errado, etc), nao so o codigo de status generico do axios.
+async function chamarClaude(systemPrompt, userPrompt, maxTokens) {
+  try {
+    const response = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: CLAUDE_MODEL,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      },
+      {
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+      }
+    );
+    return response.data.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim();
+  } catch (erro) {
+    const detalhe = erro.response?.data?.error?.message || erro.response?.data || erro.message;
+    throw new Error(`Claude API: ${JSON.stringify(detalhe)}`);
+  }
+}
+
 async function gerarMensagem({ leadNome, produto, tentativa, historico }) {
   const exemplosBons = getRecentSuccessfulExamples(4);
 
@@ -104,28 +136,7 @@ Responda APENAS com o texto da mensagem, sem aspas, sem explicacoes.`;
 Produto de interesse: ${produto || 'nao informado'}
 Historico de mensagens ja enviadas nesta sequencia: ${historico?.length ? historico.join(' | ') : 'nenhuma ainda'}`;
 
-  const response = await axios.post(
-    'https://api.anthropic.com/v1/messages',
-    {
-      model: CLAUDE_MODEL,
-      max_tokens: 200,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    },
-    {
-      headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-    }
-  );
-
-  return response.data.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n')
-    .trim();
+  return chamarClaude(systemPrompt, userPrompt, 200);
 }
 
 // Continua a conversa depois que o lead responde. Diferente do
@@ -172,28 +183,7 @@ Produto de interesse: ${produto || 'não informado'}
 Histórico da conversa (mais antiga primeiro):
 ${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : 'Consultor (IA)'}: ${m.texto}`).join('\n')}`;
 
-  const response = await axios.post(
-    'https://api.anthropic.com/v1/messages',
-    {
-      model: CLAUDE_MODEL,
-      max_tokens: 300,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    },
-    {
-      headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-    }
-  );
-
-  const textoCru = response.data.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n')
-    .trim();
+  const textoCru = await chamarClaude(systemPrompt, userPrompt, 300);
 
   try {
     const parsed = JSON.parse(textoCru);
