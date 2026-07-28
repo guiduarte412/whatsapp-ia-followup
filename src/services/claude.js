@@ -1,26 +1,17 @@
 const axios = require('axios');
-const { getRecentSuccessfulExamples, getTopicos } = require('../db/store');
+const { getRecentSuccessfulExamples } = require('../db/store');
 
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const CONSULTOR_NOME = process.env.CONSULTOR_NOME || 'Guilherme';
 const CONSULTOR_EMPRESA = process.env.CONSULTOR_EMPRESA || 'Fourcon | FourAgro';
 
-// Le o texto livre que o consultor escreveu no site (aba "Editar topicos")
-// pra aquele segmento de produto. E esse texto que vira referencia de
-// conteudo pra IA - nada estruturado, e so o que ele escreveu mesmo.
-function textoDosTopicos(produto) {
-  const topicos = getTopicos();
-  const chave = (produto || '').toLowerCase();
-  let valor;
-  if (chave.includes('agro') || chave.includes('rural')) valor = topicos.agro;
-  else if (chave.includes('imov') || chave.includes('imóv')) valor = topicos.imoveis;
-  else if (chave.includes('caminh') || chave.includes('frota') || chave.includes('veic')) valor = topicos.caminhoes;
-  else if (chave.includes('credit') || chave.includes('crédit') || chave.includes('empresa')) valor = topicos.credito_empresarial;
-  else valor = topicos.geral;
+// Todos os leads hoje sao do mesmo produto (credito agro), entao o
+// conteudo basico que a IA pode mencionar e fixo - nao precisa mais variar
+// por segmento. Se isso mudar no futuro, e so voltar a variar por "produto".
+const TOPICO_PADRAO = 'Crédito rural, para quem precisa de capital para a propriedade.';
 
-  return valor && valor.trim()
-    ? `Como mencionar o produto (bem por cima, so pra situar o lead - os detalhes ficam pra ligacao):\n${valor.trim()}`
-    : 'Nenhuma descricao basica cadastrada para este produto ainda (aba "Editar topicos" no site) - so peça o horario pra ligar, sem citar detalhes do produto.';
+function textoDosTopicos() {
+  return `Como mencionar o produto (bem por cima, so pra situar o lead - os detalhes ficam pra ligacao):\n${TOPICO_PADRAO}`;
 }
 
 // Exemplo real de mensagem que o consultor ja mandou - usado como referencia
@@ -112,6 +103,49 @@ async function chamarClaude(systemPrompt, userPrompt, maxTokens) {
   }
 }
 
+// Descreve uma imagem/figurinha recebida do lead, usando a visao nativa da
+// Claude - nao precisa de nenhum servico extra pra isso. A descricao vira
+// texto normal, que entra no fluxo de conversa como se o lead tivesse
+// escrito aquilo.
+async function descreverImagem({ base64, mimeType }) {
+  try {
+    const response = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: CLAUDE_MODEL,
+        max_tokens: 150,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+              {
+                type: 'text',
+                text: 'Descreva em 1 frase curta, em português, o que tem nessa imagem - do jeito que um consultor entenderia rapidamente o que o lead mandou (ex: "foto de um documento de identidade", "print de um extrato bancário", "figurinha de positivo/joinha"). Se for algo sensível (documento com dados pessoais, foto de rosto), diga isso genericamente sem tentar ler número nenhum.',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+      }
+    );
+    return response.data.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim();
+  } catch (erro) {
+    const detalhe = erro.response?.data?.error?.message || erro.response?.data || erro.message;
+    throw new Error(`Claude Vision: ${JSON.stringify(detalhe)}`);
+  }
+}
+
 async function gerarMensagem({ leadNome, produto, tentativa, historico }) {
   // Trava a tentativa entre 1 e 6 - protege contra um valor invalido vindo
   // de fora (ex: API de teste) fazer o prompt referenciar uma instrucao
@@ -126,7 +160,7 @@ async function gerarMensagem({ leadNome, produto, tentativa, historico }) {
         .join('\n')
     : 'Ainda sem exemplos anteriores registrados.';
 
-  const topicosTexto = textoDosTopicos(produto);
+  const topicosTexto = textoDosTopicos();
 
   const systemPrompt = `${OBJETIVO_BASE}
 
@@ -166,7 +200,7 @@ Historico de mensagens ja enviadas nesta sequencia: ${historico?.length ? histor
 //    atendimento (o proprio ${CONSULTOR_NOME} aprova o horario, em primeira
 //    pessoa - nao pede aprovacao de ninguem)
 async function responderConversa({ leadNome, produto, historicoConversa }) {
-  const topicosTexto = textoDosTopicos(produto);
+  const topicosTexto = textoDosTopicos();
 
   const systemPrompt = `${OBJETIVO_BASE}
 
@@ -190,6 +224,11 @@ Regras rígidas, sem exceção:
   para falar com uma pessoa (fora o próprio contato que já está tendo com você), OU demonstrar que
   já quer fechar negócio, marque "encaminhar_humano": true - esses casos precisam de você ao vivo,
   não por mensagem.
+- Se o lead claramente encerrar a conversa sem marcar nada - agradecendo, se despedindo, dizendo
+  que vai pensar, ou dando qualquer sinal de que não quer continuar agora - NÃO insista tentando
+  marcar horário de novo. Responda algo breve e cordial de despedida e marque
+  "encaminhar_humano": true (com o motivo "lead encerrou sem agendar"), pra parar por aqui em vez
+  de ficar tentando reengajar indefinidamente.
 - Nunca marque "horario_confirmado" e "encaminhar_humano" como true ao mesmo tempo - é sempre um
   ou outro, ou nenhum dos dois (segue a conversa normal).
 - Em qualquer um dos casos acima, sempre responda algo educado ao lead antes (nunca deixe ele sem
@@ -247,4 +286,4 @@ ${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : CONSULTOR_NOME}: ${
   }
 }
 
-module.exports = { gerarMensagem, responderConversa };
+module.exports = { gerarMensagem, responderConversa, descreverImagem };

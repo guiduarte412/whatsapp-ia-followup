@@ -2,6 +2,7 @@ const express = require('express');
 const { getLeadFlexivel, upsertLead, appendConversa, appendExample } = require('../db/store');
 const { avisarConsultor, enviarMensagem, formatarAvisoLead } = require('../services/whatsapp');
 const { responderConversa } = require('../services/claude');
+const { extrairTexto } = require('../services/media');
 
 const router = express.Router();
 
@@ -30,8 +31,6 @@ router.post('/whatsapp', express.json(), async (req, res) => {
   console.log('Webhook WhatsApp recebido:', JSON.stringify(payload));
 
   const telefoneRecebido = normalizarTelefone(payload?.phone || payload?.from);
-  const textoRecebido = payload?.text?.message || payload?.message || '[mensagem sem texto - provavelmente áudio, imagem ou figurinha]';
-
   if (!telefoneRecebido) return res.status(400).json({ erro: 'telefone nao encontrado no payload' });
 
   const lead = getLeadFlexivel(telefoneRecebido);
@@ -50,18 +49,51 @@ router.post('/whatsapp', express.json(), async (req, res) => {
   // for diferente, e voce escrevendo por fora - encerra o atendimento
   // automatico (voce assumiu). Isso e deteccao por aproximacao; se preferir
   // uma forma garantida, use o botao "Assumir conversa" na pagina do lead.
+  // Usa so o texto simples aqui (sem processar midia) - nao vale a pena
+  // gastar com leitura de imagem/audio so pra essa comparacao.
   if (payload?.fromMe === true) {
+    const textoSimples = payload?.text?.message || payload?.message || '';
     const ultimaDaIA = [...(lead.conversa || [])].reverse().find((m) => m.de === 'ia');
-    const ehEcoDaIA = ultimaDaIA && normalizarTexto(ultimaDaIA.texto) === normalizarTexto(textoRecebido);
+    const ehEcoDaIA = ultimaDaIA && normalizarTexto(ultimaDaIA.texto) === normalizarTexto(textoSimples);
 
     // So fecha automaticamente quando da pra comparar com uma mensagem da
     // IA conhecida e ela for diferente. Sem essa mensagem de referencia
     // (ultimaDaIA ausente), e mais seguro nao fechar sozinho do que
     // arriscar fechar por engano.
     if (ultimaDaIA && !ehEcoDaIA && ['sequence_active', 'conversa_ia', 'cold_nurture'].includes(lead.status)) {
-      appendConversa(telefoneLead, { de: 'ia', texto: textoRecebido });
+      appendConversa(telefoneLead, { de: 'ia', texto: textoSimples });
       upsertLead(telefoneLead, { status: 'encerrado', motivoEncerramento: 'assumido_manualmente' });
       console.log(`Lead ${telefoneLead} encerrado - mensagem manual detectada do numero conectado.`);
+    }
+    return res.status(200).json({ ok: true });
+  }
+
+  // Converte o que chegou (texto, imagem, figurinha ou audio) num texto
+  // que o resto do sistema ja sabe processar. Protegido por try/catch
+  // proprio - um erro aqui nao pode derrubar o processo inteiro.
+  let textoRecebido;
+  try {
+    textoRecebido = await extrairTexto(payload);
+  } catch (erro) {
+    console.error(`Erro extraindo texto da mensagem do lead ${telefoneLead}:`, erro.message);
+    textoRecebido = '[não foi possível processar essa mensagem]';
+  }
+
+  // Audio chegou mas ainda nao da pra transcrever (falta configurar a
+  // OPENAI_API_KEY no Railway) - avisa direto em vez de deixar a IA
+  // "adivinhar" uma resposta sem saber o que foi dito.
+  if (textoRecebido === null) {
+    try {
+      appendConversa(telefoneLead, { de: 'lead', texto: '[áudio recebido - transcrição não configurada ainda]' });
+      await avisarConsultor(formatarAvisoLead({
+        nome: lead.nome,
+        telefone: telefoneLead,
+        contexto: `Lead mandou uma mensagem de voz (${payload?.audio?.seconds || '?'}s), mas a transcrição automática ainda não está configurada (falta OPENAI_API_KEY no Railway). Ouça manualmente pelo WhatsApp por enquanto.`,
+      }));
+    } catch (erro) {
+      // Se ate o aviso falhar (Z-API fora do ar, etc), so loga - nao pode
+      // derrubar o processo por causa de uma promise sem catch.
+      console.error(`Erro avisando sobre audio nao transcrito do lead ${telefoneLead}:`, erro.message);
     }
     return res.status(200).json({ ok: true });
   }

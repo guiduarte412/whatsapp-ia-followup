@@ -35,8 +35,6 @@ Navegação (tudo na mesma página, cada seção com botão **"← Voltar"**):
   iniciar a sequência de follow-up. Alternativa ao webhook do RD Station.
 - **Testar mensagem** — três abas: Mensagem única, Conversa no WhatsApp
   (cria lead de teste real, mesmo caminho de produção) e Simular na tela.
-- **Editar tópicos** — uma caixa de texto por segmento onde você escreve o
-  que a IA pode mencionar sobre cada produto.
 - **CRM** — guarda a chave da API do RD Station (ou outro CRM) e a URL
   base, pra vincular futuramente. Não faz nenhuma chamada ainda.
 - **Google Agenda** — só marca que você quer conectar no futuro (conectar
@@ -113,11 +111,12 @@ permitido (8h-20h por padrão, configurável em `HORARIO_INICIO`/
 `HORARIO_FIM`) — se cair fora, espera a janela abrir de novo.
 
 5. Quando o lead responde, a sequência de follow-up para e a IA passa a
-   **conversar diretamente** com ele, usando só os tópicos que você
-   cadastrou na seção Editar tópicos — nunca inventando valor, prazo ou condição.
+   **conversar diretamente** com ele, usando só o conteúdo básico fixo
+   sobre crédito agro (definido em `src/services/claude.js`) — nunca
+   inventando valor, prazo ou condição.
 6. A IA encaminha a conversa pra você (avisa no seu WhatsApp) assim que
    qualquer uma dessas situações acontece:
-   - o lead pede um valor/condição que não está nos tópicos cadastrados;
+   - o lead pede um valor/condição que não está no conteúdo cadastrado;
    - o lead pergunta sobre contemplação (sorteio/lance) — a IA nunca fala
      de contemplação por texto, isso é sempre encaminhado;
    - o lead pede explicitamente para falar com uma pessoa;
@@ -139,9 +138,9 @@ permitido (8h-20h por padrão, configurável em `HORARIO_INICIO`/
    fica marcado como "nutrição futura".
 
 Um ponto de atenção: como a IA agora conversa de verdade (não só manda
-mensagens fixas), o conteúdo cadastrado nos tópicos importa mais
-ainda — é o que impede ela de improvisar sobre valores e condições do
-consórcio.
+mensagens fixas), o conteúdo básico sobre o produto (`TOPICO_PADRAO` em
+`src/services/claude.js`) importa mais ainda — é o que impede ela de
+improvisar sobre valores e condições do consórcio.
 
 ## Sobre a IA "aprender junto" — o que isso é de verdade
 
@@ -156,21 +155,23 @@ retreinado.
 
 ## Como controlar o conteúdo das mensagens
 
-Duas coisas ficam totalmente editáveis pelo site, sem mexer em código:
+Uma coisa fica totalmente editável pelo site, sem mexer em código:
 
-- **seção "Editar tópicos" no site** — uma caixa de texto por segmento (agro, imóveis,
-  caminhões, crédito empresarial) só pra situar o lead sobre qual produto
-  ele pediu. Nada de valor, prazo ou condição — isso é sempre explicado na
-  ligação, nunca por mensagem.
 - **`CONSULTOR_NOME` e `CONSULTOR_EMPRESA`** (no `.env`, no Railway) — nome
   e empresa que a IA usa pra se apresentar na primeira mensagem, do jeito
   que você já faz de verdade ("Aqui é o Guilherme, da Fourcon | FourAgro").
 
-Uma terceira coisa, mais técnica, fica no código:
+Duas outras coisas, mais técnicas, ficam no código:
 
+- **`TOPICO_PADRAO`** (em `src/services/claude.js`) — hoje fixo em
+  "Crédito rural, para quem precisa de capital para a propriedade", já que
+  todo lead é desse mesmo produto. Se isso mudar no futuro (voltar a ter
+  vários produtos), é aqui que se reintroduz a variação por segmento.
 - **`src/services/claude.js`** — tem um exemplo real de mensagem sua
   (`EXEMPLO_REAL_DE_TOM`) usado como referência de tom pra IA escrever
   parecido com você, não genérico. Editável direto pela interface do
+  GitHub (abre o arquivo, clica no lápis, edita, comita) — o Railway
+  atualiza sozinho.
   GitHub (abre o arquivo, clica no lápis, edita, comita) — o Railway
   atualiza sozinho.
 
@@ -181,12 +182,24 @@ O objetivo de toda mensagem, do jeito que você descreveu, é sempre marcar
 uma ligação ou reunião/chamada de vídeo — os detalhes do consórcio só são
 explicados ao vivo, nunca por texto.
 
+## Leitura de imagem, figurinha e áudio
+
+Quando o lead manda uma imagem ou figurinha, a própria Claude já lê e
+descreve o conteúdo (não precisa de conta nova pra isso) — a descrição
+vira o "texto" da mensagem no fluxo normal de conversa.
+
+Áudio precisa da OpenAI (Whisper) pra transcrever. Enquanto
+`OPENAI_API_KEY` não estiver configurada no Railway, mensagem de voz do
+lead gera um aviso pra você ouvir manualmente, em vez de travar ou ser
+ignorada. Assim que a chave for adicionada, a transcrição liga sozinha.
+
 ## Contas e sistemas que você precisa ter
 
 | Sistema | Pra quê | Você já tem? |
 |---|---|---|
 | RD Station CRM | Fonte do lead e webhook de status | Sim |
-| Conta na Anthropic (console.anthropic.com) | Gerar as mensagens humanizadas | Precisa criar |
+| Conta na Anthropic (console.anthropic.com) | Gerar mensagens e ler imagem/figurinha | Precisa criar |
+| Conta na OpenAI (platform.openai.com) | Transcrever áudio do lead (opcional) | Precisa criar |
 | Z-API (ou similar: Evolution API, Zapster) | Conectar seu WhatsApp Business e enviar/receber mensagens | Precisa criar |
 | Um servidor pra rodar este código 24h | Hospedar o serviço (Railway, Render, ou uma VPS) | Precisa criar |
 
@@ -194,7 +207,11 @@ explicados ao vivo, nunca por texto.
 
 - **Claude API (Haiku 4.5):** por volume — cada mensagem gerada custa perto
   de **R$ 0,01** (input+output somados). Mesmo em 1.000 mensagens/mês isso
-  fica em torno de **R$ 10-15**. É a parte mais barata de tudo.
+  fica em torno de **R$ 10-15**. Ler uma imagem custa perto disso também.
+  É a parte mais barata de tudo.
+- **OpenAI Whisper (opcional, só pra áudio):** cerca de **US$ 0,006 por
+  minuto** de áudio transcrito — poucos centavos de real por mensagem de
+  voz.
 - **Z-API:** entre **R$ 55 e R$ 100/mês** por instância (número conectado).
   Alternativa mais barata: Evolution API, que é open source e grátis — você
   paga só o servidor onde ela roda.
@@ -205,7 +222,7 @@ explicados ao vivo, nunca por texto.
 
 **Total estimado:** de **R$ 40/mês** (rota mais barata, com Evolution API) a
 cerca de **R$ 150/mês** (Z-API + hospedagem separada), fora eventuais taxas
-de cartão internacional pra pagar a Anthropic.
+de cartão internacional pra pagar a Anthropic/OpenAI.
 
 ## Aviso importante — leia antes de colocar no ar
 
@@ -291,16 +308,17 @@ src/
     rdstation-webhook.js       # recebe aviso de "não atendeu" do RD Station
     whatsapp-webhook.js        # recebe resposta do lead, para a sequência
     leads-api.js               # lista/cria leads, importação em lote
-    topicos-api.js             # lê/salva os tópicos usados pela IA
     teste-api.js                # gera mensagem de teste + simulação de conversa completa
     acesso-api.js               # verifica/troca o código de acesso ao site
     crm-api.js                  # guarda a chave de integração com o CRM
   services/
     claude.js                  # gera a mensagem humanizada
     whatsapp.js                # envia mensagem via Z-API
+    media.js                    # converte imagem/figurinha/áudio recebidos em texto
+    openai.js                   # transcreve áudio via Whisper (precisa de OPENAI_API_KEY)
     scheduler.js               # controla a cadência 2x/dia por 3 dias
   db/
-    store.js                   # guarda leads, tópicos, código de acesso e exemplos de sucesso
+    store.js                   # guarda leads, código de acesso, config do CRM e exemplos de sucesso
 public/
   index.html                  # site inteiro (todas as seções, navegação por hash)
   app.js                      # toda a lógica do site (roteamento, formulários, etc)

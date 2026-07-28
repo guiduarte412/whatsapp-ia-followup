@@ -60,9 +60,8 @@ function rotear() {
   if (view === 'lead' && param) {
     mostrarView('lead');
     carregarDetalheLead(param);
-  } else if (['novo', 'testar', 'topicos', 'codigo', 'crm', 'relatorio', 'agenda', 'metricas'].includes(view)) {
+  } else if (['novo', 'testar', 'codigo', 'crm', 'relatorio', 'agenda', 'metricas'].includes(view)) {
     mostrarView(view);
-    if (view === 'topicos') carregarTopicos();
     if (view === 'crm') carregarCrm();
     if (view === 'relatorio') prepararRelatorio();
     if (view === 'agenda') carregarAgenda();
@@ -422,60 +421,6 @@ async function simEnviarComoLead() {
 document.getElementById('btn-enviar-como-lead').addEventListener('click', simEnviarComoLead);
 document.getElementById('sim-resposta-lead').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') simEnviarComoLead();
-});
-
-// ===== VIEW: tópicos =====
-
-const SEGMENTOS_TOPICOS = [
-  { chave: 'agro', rotulo: 'Agro/rural' },
-  { chave: 'imoveis', rotulo: 'Imóveis' },
-  { chave: 'caminhoes', rotulo: 'Caminhões' },
-  { chave: 'credito_empresarial', rotulo: 'Crédito empresarial' },
-  { chave: 'geral', rotulo: 'Geral' },
-];
-let topicosAtuais = {};
-let segmentoAtivo = 'agro';
-
-function renderizarAbasTopicos() {
-  const el = document.getElementById('abas-topicos');
-  el.innerHTML = SEGMENTOS_TOPICOS.map((s) => `
-    <button class="aba ${s.chave === segmentoAtivo ? 'ativa' : ''}" data-chave="${s.chave}">${s.rotulo}</button>
-  `).join('');
-  el.querySelectorAll('.aba').forEach((botao) => {
-    botao.addEventListener('click', () => {
-      segmentoAtivo = botao.dataset.chave;
-      mostrarSegmentoTopico();
-      renderizarAbasTopicos();
-    });
-  });
-}
-
-function mostrarSegmentoTopico() {
-  const segmento = SEGMENTOS_TOPICOS.find((s) => s.chave === segmentoAtivo);
-  document.getElementById('topicos-rotulo').textContent = segmento.rotulo;
-  document.getElementById('topicos-texto').value = topicosAtuais[segmentoAtivo] || '';
-}
-
-async function carregarTopicos() {
-  const resp = await fetch('/api/topicos');
-  topicosAtuais = await resp.json();
-  renderizarAbasTopicos();
-  mostrarSegmentoTopico();
-}
-
-document.getElementById('btn-salvar-topico').addEventListener('click', async () => {
-  topicosAtuais[segmentoAtivo] = document.getElementById('topicos-texto').value;
-  const resp = await fetch('/api/topicos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(topicosAtuais),
-  });
-  if (resp.ok) {
-    const sucesso = document.getElementById('topicos-sucesso');
-    sucesso.textContent = 'Salvo.';
-    sucesso.style.display = 'block';
-    setTimeout(() => { sucesso.style.display = 'none'; }, 2500);
-  }
 });
 
 // ===== VIEW: detalhe do lead =====

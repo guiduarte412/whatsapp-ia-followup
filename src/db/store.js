@@ -13,23 +13,14 @@ const path = require('path');
 const PASTA_DADOS = process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '..', '..', 'data');
 const DB_PATH = path.join(PASTA_DADOS, 'db.json');
 
-const TOPICOS_PADRAO = {
-  agro: 'Crédito rural, para quem precisa de capital para a propriedade.',
-  imoveis: '',
-  caminhoes: '',
-  credito_empresarial: '',
-  geral: '',
-};
-
 const CODIGO_ACESSO_PADRAO = '059597';
 const PALAVRA_CHAVE_MESTRA = 'KAMILLY';
 
 function load() {
   if (!fs.existsSync(DB_PATH)) {
-    return { leads: {}, examples: [], topicos: TOPICOS_PADRAO, codigoAcesso: CODIGO_ACESSO_PADRAO, crmConfig: {} };
+    return { leads: {}, examples: [], codigoAcesso: CODIGO_ACESSO_PADRAO, crmConfig: {} };
   }
   const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-  if (!db.topicos) db.topicos = TOPICOS_PADRAO;
   if (!db.codigoAcesso) db.codigoAcesso = CODIGO_ACESSO_PADRAO;
   if (!db.crmConfig) db.crmConfig = {};
   return db;
@@ -147,17 +138,6 @@ function iniciarSequenciaEmLote(linhas) {
 
 // --- Tópicos que a IA usa como referência de conteúdo (editável pelo site) ---
 
-function getTopicos() {
-  return load().topicos;
-}
-
-function salvarTopicos(novosTopicos) {
-  const db = load();
-  db.topicos = { ...db.topicos, ...novosTopicos };
-  save(db);
-  return db.topicos;
-}
-
 // Adiciona uma mensagem (de: 'ia' ou 'lead') ao historico de conversa do
 // lead. E esse historico que a IA le pra continuar a conversa depois que
 // o lead responde.
@@ -249,8 +229,6 @@ module.exports = {
   iniciarSequencia,
   iniciarSequenciaEmLote,
   removerLead,
-  getTopicos,
-  salvarTopicos,
   getCrmConfig,
   salvarCrmConfig,
   getGoogleAgendaConfig,
