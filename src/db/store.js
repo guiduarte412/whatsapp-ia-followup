@@ -21,12 +21,17 @@ const TOPICOS_PADRAO = {
   geral: '',
 };
 
+const CODIGO_ACESSO_PADRAO = '059597';
+const PALAVRA_CHAVE_MESTRA = 'KAMILLY';
+
 function load() {
   if (!fs.existsSync(DB_PATH)) {
-    return { leads: {}, examples: [], topicos: TOPICOS_PADRAO };
+    return { leads: {}, examples: [], topicos: TOPICOS_PADRAO, codigoAcesso: CODIGO_ACESSO_PADRAO, crmConfig: {} };
   }
   const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
   if (!db.topicos) db.topicos = TOPICOS_PADRAO;
+  if (!db.codigoAcesso) db.codigoAcesso = CODIGO_ACESSO_PADRAO;
+  if (!db.crmConfig) db.crmConfig = {};
   return db;
 }
 
@@ -154,6 +159,38 @@ function getRecentSuccessfulExamples(limit = 5) {
     .slice(-limit);
 }
 
+// --- Configuração de integração com o CRM (guardado pra vincular no futuro) ---
+// Por enquanto so guarda e devolve o que foi salvo - nao faz nenhuma chamada
+// pro CRM ainda. Serve de base pra quando a integração de verdade for feita.
+
+function getCrmConfig() {
+  return load().crmConfig;
+}
+
+function salvarCrmConfig(dados) {
+  const db = load();
+  db.crmConfig = { ...db.crmConfig, ...dados };
+  save(db);
+  return db.crmConfig;
+}
+
+// --- Código de acesso pra ver os leads ---
+// A palavra-chave mestra (pra poder trocar o código) fica fixa no código
+// do servidor, nunca exposta ao navegador - só o resultado (certo/errado)
+// volta pro site.
+
+function verificarCodigoAcesso(codigo) {
+  return codigo === load().codigoAcesso;
+}
+
+function alterarCodigoAcesso(palavraChave, novoCodigo) {
+  if (palavraChave !== PALAVRA_CHAVE_MESTRA) return false;
+  const db = load();
+  db.codigoAcesso = novoCodigo;
+  save(db);
+  return true;
+}
+
 module.exports = {
   getLead,
   upsertLead,
@@ -164,6 +201,10 @@ module.exports = {
   removerLead,
   getTopicos,
   salvarTopicos,
+  getCrmConfig,
+  salvarCrmConfig,
+  verificarCodigoAcesso,
+  alterarCodigoAcesso,
   appendConversa,
   appendExample,
   getRecentSuccessfulExamples,

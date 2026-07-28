@@ -1,7 +1,7 @@
 const cron = require('node-cron');
-const { getActiveSequenceLeads, upsertLead, appendExample } = require('../db/store');
+const { getActiveSequenceLeads, upsertLead, appendExample, appendConversa } = require('../db/store');
 const { gerarMensagem } = require('./claude');
-const { enviarMensagem, avisarConsultor } = require('./whatsapp');
+const { enviarMensagem, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
 
 // A sequencia tem 6 envios (2 por dia x 3 dias). Aqui vao os horarios-alvo
 // em "horas desde o inicio da sequencia" - variados de propósito (nao e
@@ -32,6 +32,7 @@ async function processarLead(lead) {
   });
 
   await enviarMensagem(lead.phone, mensagem);
+  appendConversa(lead.phone, { de: 'ia', texto: mensagem });
 
   const mensagensEnviadas = [...(lead.mensagensEnviadas || []), mensagem];
 
@@ -43,9 +44,11 @@ async function processarLead(lead) {
       status: 'cold_nurture',
     });
     appendExample({ mensagem, tentativa: tentativaAtual, responded: false, phone: lead.phone });
-    await avisarConsultor(
-      `Lead ${lead.nome || lead.phone} completou as 6 tentativas sem responder. Fica marcado para nutricao futura.`
-    );
+    await avisarConsultor(formatarAvisoLead({
+      nome: lead.nome,
+      telefone: lead.phone,
+      contexto: 'Completou as 6 tentativas sem responder. Fica marcado para nutrição futura.',
+    }));
   } else {
     upsertLead(lead.phone, { attemptsSent: tentativaAtual, mensagensEnviadas });
   }

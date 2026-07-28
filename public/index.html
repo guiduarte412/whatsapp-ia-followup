@@ -3,158 +3,317 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Leads em acompanhamento — Fourcon | FourAgro</title>
+<title>Fourcon | FourAgro — Leads</title>
 <link rel="stylesheet" href="/estilo.css">
 </head>
 <body>
-<header class="hero">
-  <div class="conteudo">
-    <div>
+
+<div id="gate" class="tela-gate">
+  <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
+  <h1>Acesso restrito</h1>
+  <input type="password" id="codigo-acesso" placeholder="código" maxlength="6" inputmode="numeric">
+  <br>
+  <button class="botao" id="btn-entrar">Entrar</button>
+  <p class="erro-gate" id="erro-gate" style="display:none;">Código incorreto.</p>
+</div>
+
+<div id="app" style="display:none;">
+
+  <header class="hero">
+    <div class="topo">
       <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
-      <p class="marca">Fourcon | FourAgro</p>
-      <h1>Leads em acompanhamento</h1>
+      <div class="acoes">
+        <a class="botao secundario" href="#relatorio">Relatório diário</a>
+        <a class="botao secundario" href="#crm">CRM</a>
+        <a class="botao secundario" href="#topicos">Editar tópicos</a>
+        <a class="botao secundario" href="#codigo">Código de acesso</a>
+        <a class="botao" href="#novo">+ Novo lead</a>
+      </div>
     </div>
-    <div class="acoes">
-      <a class="botao secundario" href="/testar.html" target="_blank" rel="noopener">Testar mensagem</a>
-      <a class="botao secundario" href="/topicos.html">Editar tópicos</a>
-      <a class="botao" href="/novo.html">+ Novo lead</a>
+    <div class="conteudo">
+      <p class="eyebrow">Fourcon | FourAgro</p>
+      <h1>Leads em acompanhamento <span class="destaque">com Inteligência</span></h1>
+      <div class="acoes">
+        <a class="botao secundario" href="#testar">Testar mensagem</a>
+      </div>
     </div>
-  </div>
-</header>
+  </header>
 
-<div class="container">
-  <div class="barra-ferramentas">
-    <button class="botao claro" id="btn-exportar">Exportar Excel</button>
-    <button class="botao claro" id="btn-importar">Importar Excel</button>
-    <input type="file" id="arquivo-importar" accept=".xlsx,.xls" style="display:none">
-  </div>
+  <main class="container">
 
-  <div class="sucesso" id="msg-importacao"></div>
+    <!-- VIEW: lista de leads -->
+    <section id="view-leads" class="view">
+      <div class="barra-ferramentas">
+        <button class="botao claro" id="btn-exportar">Exportar Excel</button>
+        <button class="botao claro" id="btn-importar">Importar Excel</button>
+        <input type="file" id="arquivo-importar" accept=".xlsx,.xls" style="display:none">
+      </div>
+      <div class="sucesso" id="msg-importacao"></div>
+      <div class="painel">
+        <div class="cabecalho-lista">
+          <span>Lead</span>
+          <span>Telefone</span>
+          <span>Produto</span>
+          <span>Status</span>
+          <span>Sequência</span>
+        </div>
+        <div class="lista" id="lista">
+          <div class="vazio">Carregando…</div>
+        </div>
+      </div>
+    </section>
 
-  <div class="painel">
-    <div class="cabecalho-lista">
-      <span>Lead</span>
-      <span>Telefone</span>
-      <span>Produto</span>
-      <span>Status</span>
-      <span>Sequência</span>
-    </div>
+    <!-- VIEW: novo lead -->
+    <section id="view-novo" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <div class="cartao">
+        <h2 style="margin-top:0;">Adicionar lead</h2>
+        <div class="erro" id="novo-erro"></div>
+        <form id="form-novo">
+          <div class="campo">
+            <label for="novo-nome">Nome do lead</label>
+            <input type="text" id="novo-nome" required>
+          </div>
+          <div class="campo">
+            <label for="novo-telefone">WhatsApp</label>
+            <input type="text" id="novo-telefone" placeholder="5555999999999" required>
+            <p class="dica">Só números, com código do país e DDD.</p>
+          </div>
+          <div class="campo">
+            <label for="novo-produto">Produto</label>
+            <select id="novo-produto" required>
+              <option value="">Selecione</option>
+              <option value="agro">Agro/rural</option>
+              <option value="imoveis">Imóveis</option>
+              <option value="caminhoes">Caminhões</option>
+              <option value="credito_empresarial">Crédito empresarial</option>
+            </select>
+          </div>
+          <button type="submit" class="botao claro">Adicionar à sequência</button>
+        </form>
+      </div>
+    </section>
 
-    <div class="lista" id="lista">
-      <div class="vazio">Carregando…</div>
-    </div>
-  </div>
+    <!-- VIEW: testar -->
+    <section id="view-testar" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <div class="abas" id="abas-teste">
+        <button class="aba ativa" data-modo="unica">Mensagem única</button>
+        <button class="aba" data-modo="whatsapp">Conversa no WhatsApp</button>
+        <button class="aba" data-modo="simulacao">Simular na tela</button>
+      </div>
+
+      <div id="modo-whatsapp" style="display:none;">
+        <p class="dica" style="margin: 0 0 20px;">
+          Cria um lead de teste (selo TESTE no painel) e manda a primeira mensagem
+          agora pro número que você informar. A partir daí, é só responder normalmente
+          pelo seu WhatsApp — a conversa segue pelo caminho real.
+        </p>
+        <div class="cartao largo">
+          <div class="erro" id="wa-erro"></div>
+          <div class="sucesso" id="wa-sucesso"></div>
+          <form id="form-whatsapp">
+            <div class="campo">
+              <label for="wa-nome">Nome do lead (fictício)</label>
+              <input type="text" id="wa-nome" placeholder="Ex: João Teste">
+            </div>
+            <div class="campo">
+              <label for="wa-telefone">Seu WhatsApp (pra receber e responder)</label>
+              <input type="text" id="wa-telefone" placeholder="5555999999999" required>
+            </div>
+            <div class="campo">
+              <label for="wa-produto">Produto</label>
+              <select id="wa-produto">
+                <option value="agro">Agro/rural</option>
+                <option value="imoveis">Imóveis</option>
+                <option value="caminhoes">Caminhões</option>
+                <option value="credito_empresarial">Crédito empresarial</option>
+              </select>
+            </div>
+            <button type="submit" class="botao claro" id="wa-btn">Iniciar teste no WhatsApp</button>
+          </form>
+        </div>
+      </div>
+
+      <div id="modo-unica">
+        <p class="dica" style="margin: 0 0 20px;">
+          Gera uma mensagem com a mesma IA e manda pro número informado. Não cria
+          lead nem entra na sequência automática.
+        </p>
+        <div class="cartao largo">
+          <div class="erro" id="erro"></div>
+          <div class="sucesso" id="sucesso"></div>
+          <form id="form-teste">
+            <div class="campo">
+              <label for="nome">Nome do lead (fictício)</label>
+              <input type="text" id="nome" placeholder="Ex: João Teste">
+            </div>
+            <div class="campo">
+              <label for="telefone">Enviar a mensagem de teste para</label>
+              <input type="text" id="telefone" placeholder="Seu WhatsApp, ex: 5555999999999" required>
+            </div>
+            <div class="campo">
+              <label for="produto">Produto</label>
+              <select id="produto">
+                <option value="agro">Agro/rural</option>
+                <option value="imoveis">Imóveis</option>
+                <option value="caminhoes">Caminhões</option>
+                <option value="credito_empresarial">Crédito empresarial</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="tentativa">Qual mensagem da sequência testar</label>
+              <select id="tentativa">
+                <option value="1">1ª tentativa (primeiro contato)</option>
+                <option value="2">2ª tentativa</option>
+                <option value="3">3ª tentativa</option>
+                <option value="4">4ª tentativa</option>
+                <option value="5">5ª tentativa</option>
+                <option value="6">6ª tentativa (última, fechamento)</option>
+              </select>
+            </div>
+            <button type="submit" class="botao claro" id="btn-enviar">Gerar e enviar mensagem de teste</button>
+          </form>
+          <div id="resultado" style="display:none; margin-top: 24px;">
+            <label>Mensagem gerada</label>
+            <div class="bolha ia" style="max-width: 100%;" id="texto-gerado"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="modo-simulacao" style="display:none;">
+        <p class="dica" style="margin: 0 0 20px;">
+          Simula o roteiro na tela, sem tocar no WhatsApp nem criar lead.
+        </p>
+        <div class="cartao largo">
+          <div class="campo">
+            <label for="sim-nome">Nome do lead (fictício)</label>
+            <input type="text" id="sim-nome" placeholder="Ex: João Teste">
+          </div>
+          <div class="campo">
+            <label for="sim-produto">Produto</label>
+            <select id="sim-produto">
+              <option value="agro">Agro/rural</option>
+              <option value="imoveis">Imóveis</option>
+              <option value="caminhoes">Caminhões</option>
+              <option value="credito_empresarial">Crédito empresarial</option>
+            </select>
+          </div>
+          <button class="botao claro" id="btn-iniciar-simulacao">Iniciar simulação</button>
+          <div class="conversa" id="sim-conversa" style="margin-top: 24px;"></div>
+          <div id="sim-encaminhado" style="display:none; margin-top: 16px; padding: 14px; border-radius: 6px; background: rgba(232,92,74,0.15); border: 1px solid var(--alerta); color: var(--branco); font-size: 13px;"></div>
+          <div id="sim-input-area" style="display:none; margin-top: 16px; gap: 8px;">
+            <input type="text" id="sim-resposta-lead" placeholder="Digite o que o lead responderia..." style="flex: 1;">
+            <button class="botao claro" id="btn-enviar-como-lead">Enviar como lead</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW: tópicos -->
+    <section id="view-topicos" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <p class="dica" style="margin: 0 0 20px;">
+        Escreva, por produto, o que a IA pode mencionar pro lead — bem básico,
+        sem valor, prazo ou condição.
+      </p>
+      <div class="abas" id="abas-topicos"></div>
+      <div class="cartao largo">
+        <div class="sucesso" id="topicos-sucesso"></div>
+        <div class="campo">
+          <label id="topicos-rotulo">Agro/rural</label>
+          <textarea id="topicos-texto" placeholder="Ex: Crédito rural, para quem precisa de capital para a propriedade."></textarea>
+        </div>
+        <button class="botao claro" id="btn-salvar-topico">Salvar</button>
+      </div>
+    </section>
+
+    <!-- VIEW: detalhe do lead -->
+    <section id="view-lead" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <div class="painel" style="padding: 24px;">
+        <h2 id="lead-nome" style="margin-top:0;">—</h2>
+        <div id="lead-resumo"></div>
+        <div class="conversa" id="lead-conversa"></div>
+        <button class="botao secundario" id="btn-remover-lead" style="margin-top:20px; border-color: rgba(232,92,74,0.6);">Remover lead</button>
+      </div>
+    </section>
+
+    <!-- VIEW: trocar código de acesso -->
+    <section id="view-codigo" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <div class="cartao">
+        <h2 style="margin-top:0;">Trocar código de acesso</h2>
+        <div class="erro" id="codigo-erro"></div>
+        <div class="sucesso" id="codigo-sucesso"></div>
+        <form id="form-codigo">
+          <div class="campo">
+            <label for="codigo-palavra-chave">Palavra-chave</label>
+            <input type="password" id="codigo-palavra-chave" required>
+          </div>
+          <div class="campo">
+            <label for="codigo-novo">Novo código de acesso</label>
+            <input type="text" id="codigo-novo" maxlength="6" required>
+          </div>
+          <button type="submit" class="botao claro">Salvar novo código</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- VIEW: integração com o CRM -->
+    <section id="view-crm" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <div class="cartao largo">
+        <h2 style="margin-top:0;">Integração com o CRM</h2>
+        <p class="dica" style="margin-top:0;">
+          Guarda aqui a chave da API do RD Station (ou outro CRM) pra vincular
+          futuramente. Por enquanto só fica salva — nenhuma integração automática
+          usa isso ainda.
+        </p>
+        <div class="sucesso" id="crm-sucesso"></div>
+        <form id="form-crm">
+          <div class="campo">
+            <label for="crm-url">URL base da API (opcional)</label>
+            <input type="text" id="crm-url" placeholder="Ex: https://crm.rdstation.com/api/v1">
+          </div>
+          <div class="campo">
+            <label for="crm-chave">Chave da API</label>
+            <input type="password" id="crm-chave" placeholder="Cole a chave aqui">
+            <p class="dica" id="crm-status"></p>
+          </div>
+          <button type="submit" class="botao claro">Salvar</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- VIEW: relatório diário -->
+    <section id="view-relatorio" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <p class="dica" style="margin: 0 0 20px;">
+        Resumo do que aconteceu num dia, pronto pra você repassar no CRM.
+      </p>
+      <div class="barra-ferramentas" style="margin-top:0;">
+        <input type="date" id="relatorio-data" style="max-width: 200px;">
+        <button class="botao claro" id="btn-gerar-relatorio">Gerar relatório</button>
+        <button class="botao secundario" id="btn-exportar-relatorio">Exportar Excel</button>
+      </div>
+      <div class="painel">
+        <div class="cabecalho-lista" style="grid-template-columns: 1.2fr 1fr 1fr 2fr;">
+          <span>Lead</span>
+          <span>Telefone</span>
+          <span>Status</span>
+          <span>O que aconteceu</span>
+        </div>
+        <div class="lista" id="relatorio-lista">
+          <div class="vazio">Escolha uma data e clique em "Gerar relatório".</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script>
-const LABELS_STATUS = {
-  sequence_active: 'Sequência ativa',
-  conversa_ia: 'IA conversando',
-  human_handoff: 'Aguardando você',
-  cold_nurture: 'Nutrição futura',
-};
-
-const LABELS_PRODUTO = {
-  agro: 'Agro/rural',
-  imoveis: 'Imóveis',
-  caminhoes: 'Caminhões',
-  credito_empresarial: 'Crédito empresarial',
-};
-
-function progressoHtml(tentativas) {
-  let bolas = '';
-  for (let i = 1; i <= 6; i++) {
-    bolas += `<span class="bola ${i <= (tentativas || 0) ? 'ativa' : ''}"></span>`;
-  }
-  return `<div class="progresso">${bolas}</div>`;
-}
-
-async function carregar() {
-  const lista = document.getElementById('lista');
-  try {
-    const resp = await fetch('/api/leads');
-    const leads = await resp.json();
-
-    if (!leads.length) {
-      lista.innerHTML = '<div class="vazio">Nenhum lead ainda. Adicione o primeiro depois de uma ligação sem retorno.</div>';
-      return;
-    }
-
-    lista.innerHTML = leads.map((lead) => `
-      <a class="linha-lead" href="/lead.html?telefone=${encodeURIComponent(lead.phone)}">
-        <span class="nome">${lead.nome || '—'}${lead.teste ? ' <span style="font-family: var(--font-mono); font-size: 10px; color: var(--terracotta); border: 1px solid var(--terracotta); padding: 1px 5px; border-radius: 3px; vertical-align: middle;">TESTE</span>' : ''}</span>
-        <span class="telefone">${lead.phone}</span>
-        <span class="produto">${LABELS_PRODUTO[lead.produto] || lead.produto || '—'}</span>
-        <span class="status ${lead.status}"><span class="ponto"></span>${LABELS_STATUS[lead.status] || lead.status}</span>
-        ${progressoHtml(lead.attemptsSent)}
-      </a>
-    `).join('');
-  } catch (erro) {
-    lista.innerHTML = '<div class="vazio">Não consegui carregar os leads agora.</div>';
-  }
-}
-
-// --- Exportar Excel ---
-document.getElementById('btn-exportar').addEventListener('click', async () => {
-  const resp = await fetch('/api/leads');
-  const leads = await resp.json();
-
-  const linhas = leads.map((l) => ({
-    Nome: l.nome || '',
-    Telefone: l.phone,
-    Produto: LABELS_PRODUTO[l.produto] || l.produto || '',
-    Status: LABELS_STATUS[l.status] || l.status,
-    'Mensagens enviadas': l.attemptsSent || 0,
-    'Início da sequência': l.sequenceStartedAt || '',
-  }));
-
-  const planilha = XLSX.utils.json_to_sheet(linhas);
-  const livro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(livro, planilha, 'Leads');
-  XLSX.writeFile(livro, `leads-fouragro-${new Date().toISOString().slice(0, 10)}.xlsx`);
-});
-
-// --- Importar Excel ---
-const inputArquivo = document.getElementById('arquivo-importar');
-document.getElementById('btn-importar').addEventListener('click', () => inputArquivo.click());
-
-inputArquivo.addEventListener('change', async (evento) => {
-  const arquivo = evento.target.files[0];
-  if (!arquivo) return;
-
-  const dadosArquivo = await arquivo.arrayBuffer();
-  const livro = XLSX.read(dadosArquivo);
-  const primeiraAba = livro.Sheets[livro.SheetNames[0]];
-  const linhas = XLSX.utils.sheet_to_json(primeiraAba);
-
-  // Aceita cabecalhos em português (Nome, Telefone, Produto) - ajuste
-  // livre caso sua planilha use outros nomes de coluna.
-  const leadsParaImportar = linhas.map((linha) => ({
-    nome: linha.Nome || linha.nome || '',
-    telefone: linha.Telefone || linha.telefone || linha.WhatsApp || '',
-    produto: (linha.Produto || linha.produto || 'geral').toString().toLowerCase(),
-  }));
-
-  const resp = await fetch('/api/leads/lote', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ leads: leadsParaImportar }),
-  });
-  const resultado = await resp.json();
-
-  const msg = document.getElementById('msg-importacao');
-  msg.style.display = 'block';
-  msg.textContent = resultado.erros?.length
-    ? `${resultado.criados} lead(s) importado(s). ${resultado.erros.length} linha(s) com erro (confira nome/telefone).`
-    : `${resultado.criados} lead(s) importado(s) com sucesso.`;
-
-  inputArquivo.value = '';
-  carregar();
-});
-
-carregar();
-setInterval(carregar, 30000);
-</script>
+<script src="/app.js"></script>
 </body>
 </html>

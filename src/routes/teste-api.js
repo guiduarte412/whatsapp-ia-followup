@@ -22,7 +22,7 @@ router.post('/testar-mensagem', async (req, res) => {
 
   try {
     const texto = await gerarMensagem({ leadNome: nome, produto, tentativa, historico: [] });
-    await enviarMensagem(telefone, `[TESTE] ${texto}`);
+    await enviarMensagem(telefone, texto);
     res.json({ texto });
   } catch (erro) {
     res.status(500).json({ erro: erro.message || 'falha ao gerar/enviar mensagem de teste' });

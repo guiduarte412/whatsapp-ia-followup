@@ -6,6 +6,8 @@ const whatsappWebhook = require('./routes/whatsapp-webhook');
 const leadsApi = require('./routes/leads-api');
 const topicosApi = require('./routes/topicos-api');
 const testeApi = require('./routes/teste-api');
+const acessoApi = require('./routes/acesso-api');
+const crmApi = require('./routes/crm-api');
 const scheduler = require('./services/scheduler');
 
 const app = express();
@@ -15,6 +17,8 @@ app.use('/webhooks', whatsappWebhook);
 app.use('/api', leadsApi);
 app.use('/api', topicosApi);
 app.use('/api', testeApi);
+app.use('/api', acessoApi);
+app.use('/api', crmApi);
 
 // Site simples pra adicionar leads manualmente e ver o andamento -
 // arquivos em /public, sem build step, só HTML/CSS/JS puro.

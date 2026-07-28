@@ -1,17 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #F3F1E9;
-  --bg-card: #FFFFFF;
-  --ink: #1C2B22;
-  --ink-soft: #566258;
-  --line: #DEDBCB;
-  --gold: #B8863B;
-  --forest: #2F4A3A;
-  --forest-dark: #17261C;
-  --teal: #3E6B7A;
-  --terracotta: #B8503A;
-  --gray: #8A8A7E;
+  --laranja: #E8734A;
+  --laranja-escuro: #C85F3A;
+  --preto: #141613;
+  --branco: #FFFFFF;
+  --painel: rgba(12,15,13,0.62);
+  --painel-claro: rgba(255,255,255,0.08);
+  --linha: rgba(255,255,255,0.16);
+  --texto-fraco: rgba(255,255,255,0.65);
+  --alerta: #E85C4A;
 
   --font-display: 'Fraunces', serif;
   --font-body: 'IBM Plex Sans', sans-serif;
@@ -24,12 +22,13 @@ body {
   margin: 0;
   min-height: 100vh;
   background-image:
-    linear-gradient(rgba(15,28,19,0.35), rgba(15,28,19,0.55)),
+    linear-gradient(90deg, rgba(10,13,11,0.88) 0%, rgba(10,13,11,0.55) 45%, rgba(10,13,11,0.25) 100%),
     url('https://image.typedream.com/cdn-cgi/image/width=1920,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/355IjjONlsLJ4MvBDWafE0L8TYz_background_ajst.png');
   background-size: cover;
-  background-position: center;
+  background-position: top right;
   background-attachment: fixed;
-  color: var(--ink);
+  background-repeat: no-repeat;
+  color: var(--branco);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
@@ -42,50 +41,78 @@ a { color: inherit; }
   padding: 0 24px 80px;
 }
 
-/* --- Hero / cabecalho com a identidade da FourAgro --- */
-/* O fundo agora e da pagina inteira (ver `body`) - o header so aplica um
-   verniz escuro por cima, na mesma imagem, pra manter o texto legivel. */
+/* --- Tela de acesso (gate) --- */
+
+.tela-gate {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+.tela-gate img.logo { height: 40px; margin-bottom: 28px; }
+.tela-gate h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  margin: 0 0 20px;
+  color: var(--branco);
+}
+.tela-gate input {
+  width: 220px;
+  text-align: center;
+  letter-spacing: 0.3em;
+  font-size: 20px;
+  font-family: var(--font-mono);
+}
+.tela-gate .botao { margin-top: 16px; }
+.erro-gate { color: var(--alerta); font-size: 13px; margin-top: 14px; }
+
+/* --- Hero / cabecalho --- */
 
 header.hero {
   position: relative;
-  margin-bottom: 32px;
-  padding: 28px 24px 24px;
-  background: linear-gradient(135deg, rgba(15,28,19,0.55), rgba(23,38,28,0.35));
-  color: #fff;
+  padding: 24px 24px 56px;
 }
 
-header.hero .conteudo {
+header.hero .topo {
   max-width: 900px;
-  margin: 0 auto;
+  margin: 0 auto 60px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   gap: 16px;
   flex-wrap: wrap;
 }
 
-header.hero img.logo {
-  height: 34px;
-  display: block;
-  margin-bottom: 18px;
+header.hero img.logo { height: 32px; display: block; }
+
+header.hero .conteudo {
+  max-width: 900px;
+  margin: 0 auto;
 }
 
-header.hero .marca {
+header.hero .eyebrow {
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--gold);
-  margin: 0 0 6px;
+  color: var(--laranja);
+  margin: 0 0 10px;
 }
 
 header.hero h1 {
   font-family: var(--font-display);
-  font-weight: 500;
-  font-size: 30px;
-  margin: 0;
-  color: #fff;
+  font-weight: 600;
+  font-size: 40px;
+  line-height: 1.15;
+  margin: 0 0 20px;
+  color: var(--branco);
+  max-width: 520px;
 }
+header.hero h1 .destaque { color: var(--laranja); }
 
 header.hero .acoes {
   display: flex;
@@ -93,53 +120,79 @@ header.hero .acoes {
   flex-wrap: wrap;
 }
 
+/* --- Botões --- */
+
 .botao {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--gold);
-  color: #1C2B22;
+  background: var(--laranja);
+  color: var(--preto);
   border: none;
-  padding: 11px 18px;
-  border-radius: 4px;
+  padding: 13px 22px;
+  border-radius: 999px;
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 13px;
   text-decoration: none;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: background 0.15s ease;
   white-space: nowrap;
 }
-.botao:hover { filter: brightness(1.08); }
-.botao:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.botao:hover { background: var(--laranja-escuro); }
+.botao:focus-visible { outline: 2px solid var(--branco); outline-offset: 2px; }
 
 .botao.secundario {
-  background: rgba(255,255,255,0.1);
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.4);
+  background: var(--painel-claro);
+  color: var(--branco);
+  border: 1px solid var(--linha);
 }
-.botao.secundario:hover { background: rgba(255,255,255,0.18); }
+.botao.secundario:hover { background: rgba(255,255,255,0.16); }
 
-.botao.claro {
-  background: var(--forest);
-  color: #fff;
+.botao.claro { background: var(--laranja); color: var(--preto); }
+
+.voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--branco);
+  background: var(--painel-claro);
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  padding: 8px 16px;
+  text-decoration: none;
+  cursor: pointer;
+  margin-bottom: 24px;
 }
-.botao.claro:hover { background: var(--forest-dark); }
+.voltar:hover { background: rgba(255,255,255,0.16); }
 
-/* --- Lista de leads --- */
-/* Painel translucido (efeito vidro) pra deixar o fundo aparecer atras da
-   lista, mas mantendo o texto legivel por cima. */
+/* --- Painel translúcido (lista, cartões) --- */
 
 .painel {
-  background: rgba(255,255,255,0.55);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.6);
-  border-radius: 10px;
-  padding: 8px 16px 4px;
+  background: var(--painel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  padding: 8px 20px 4px;
 }
 
-.lista { border-top: 1px solid rgba(28,43,34,0.15); }
+.cartao {
+  background: var(--painel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 480px;
+}
+.cartao.largo { max-width: 640px; }
+
+/* --- Lista de leads --- */
+
+.lista { border-top: 1px solid var(--linha); }
 
 .linha-lead {
   display: grid;
@@ -147,16 +200,16 @@ header.hero .acoes {
   gap: 16px;
   align-items: center;
   padding: 16px 4px;
-  border-bottom: 1px solid rgba(28,43,34,0.12);
+  border-bottom: 1px solid var(--linha);
   text-decoration: none;
-  color: inherit;
+  color: var(--branco);
   transition: background 0.12s ease;
 }
-.linha-lead:hover { background: rgba(255,255,255,0.4); }
+.linha-lead:hover { background: rgba(255,255,255,0.06); }
 
-.linha-lead .nome { font-weight: 600; }
-.linha-lead .telefone { font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); }
-.linha-lead .produto { font-size: 13px; color: var(--ink-soft); text-transform: capitalize; }
+.linha-lead .nome { font-weight: 600; color: var(--branco); }
+.linha-lead .telefone { font-family: var(--font-mono); font-size: 13px; color: var(--texto-fraco); }
+.linha-lead .produto { font-size: 13px; color: var(--texto-fraco); text-transform: capitalize; }
 
 .status {
   display: inline-flex;
@@ -164,21 +217,22 @@ header.hero .acoes {
   gap: 6px;
   font-size: 13px;
   font-weight: 500;
+  color: var(--branco);
 }
 .status .ponto { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.status.sequence_active .ponto { background: var(--gold); }
-.status.conversa_ia .ponto { background: var(--teal); }
-.status.human_handoff .ponto { background: var(--terracotta); }
-.status.cold_nurture .ponto { background: var(--gray); }
+.status.sequence_active .ponto { background: var(--laranja); }
+.status.conversa_ia .ponto { background: var(--branco); }
+.status.human_handoff .ponto { background: var(--alerta); }
+.status.cold_nurture .ponto { background: var(--texto-fraco); }
 
 .progresso { display: flex; gap: 4px; }
-.progresso .bola { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
-.progresso .bola.ativa { background: var(--gold); }
+.progresso .bola { width: 7px; height: 7px; border-radius: 50%; background: var(--linha); }
+.progresso .bola.ativa { background: var(--laranja); }
 
 .vazio {
   padding: 48px 4px;
   text-align: center;
-  color: var(--ink-soft);
+  color: var(--texto-fraco);
   font-family: var(--font-display);
   font-size: 18px;
 }
@@ -192,7 +246,7 @@ header.hero .acoes {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--texto-fraco);
 }
 
 .barra-ferramentas {
@@ -200,72 +254,61 @@ header.hero .acoes {
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 20px;
+  margin-bottom: 20px;
 }
 
 /* --- Formulário --- */
 
-.cartao {
-  background: rgba(255,255,255,0.6);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.6);
-  border-radius: 6px;
-  padding: 32px;
-  max-width: 480px;
-}
-.cartao.largo { max-width: 640px; }
-
 label {
   display: block;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   margin-bottom: 6px;
-  color: var(--forest-dark);
+  color: var(--branco);
 }
 
 .campo { margin-bottom: 20px; }
 
-.dica { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+.dica { font-size: 12px; color: var(--texto-fraco); margin-top: 4px; }
 
 input, select, textarea {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
   font-family: var(--font-body);
   font-size: 14px;
-  background: #fff;
-  color: var(--ink);
+  background: rgba(0,0,0,0.35);
+  color: var(--branco);
 }
+input::placeholder, textarea::placeholder { color: var(--texto-fraco); }
 textarea { resize: vertical; min-height: 110px; line-height: 1.5; }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); outline-offset: 1px; border-color: var(--gold); }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--laranja); outline-offset: 1px; border-color: var(--laranja); }
+select option { background: var(--preto); color: var(--branco); }
 
 .erro, .sucesso {
   padding: 10px 14px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 13px;
   margin-bottom: 20px;
   display: none;
 }
-.erro { background: rgba(184,80,58,0.1); border: 1px solid var(--terracotta); color: var(--terracotta); }
-.sucesso { background: rgba(47,74,58,0.1); border: 1px solid var(--forest); color: var(--forest-dark); }
+.erro { background: rgba(232,92,74,0.15); border: 1px solid var(--alerta); color: var(--branco); }
+.sucesso { background: rgba(232,115,74,0.15); border: 1px solid var(--laranja); color: var(--branco); }
 
 /* --- Conversa (detalhe do lead) --- */
 
 .conversa { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
 .bolha { max-width: 72%; padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.4; }
-.bolha.ia { align-self: flex-end; background: var(--forest); color: #fff; border-bottom-right-radius: 2px; }
-.bolha.lead { align-self: flex-start; background: var(--bg-card); border: 1px solid var(--line); border-bottom-left-radius: 2px; }
-.bolha .hora { display: block; font-family: var(--font-mono); font-size: 10px; opacity: 0.65; margin-top: 4px; }
-
-.voltar { font-size: 13px; color: var(--ink-soft); text-decoration: none; margin: 20px 0 0; display: inline-block; }
-.voltar:hover { color: var(--forest); }
+.bolha.ia { align-self: flex-end; background: var(--laranja); color: var(--preto); border-bottom-right-radius: 2px; font-weight: 500; }
+.bolha.lead { align-self: flex-start; background: var(--painel-claro); border: 1px solid var(--linha); color: var(--branco); border-bottom-left-radius: 2px; }
+.bolha .hora { display: block; font-family: var(--font-mono); font-size: 10px; opacity: 0.7; margin-top: 4px; }
 
 .abas {
   display: flex;
   gap: 4px;
   margin-bottom: 24px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--linha);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -274,7 +317,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); outl
   margin-right: 20px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink-soft);
+  color: var(--texto-fraco);
   text-decoration: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
@@ -283,23 +326,38 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); outl
   border-left: none;
   border-right: none;
   font-family: var(--font-body);
+  white-space: nowrap;
 }
-.aba.ativa { color: var(--forest-dark); border-bottom-color: var(--gold); }
-.aba { white-space: nowrap; }
+.aba.ativa { color: var(--branco); border-bottom-color: var(--laranja); }
+
+h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--branco);
+  font-size: 24px;
+}
+
+.selo-teste {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--alerta);
+  border: 1px solid var(--alerta);
+  padding: 1px 5px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
 
 @media (max-width: 640px) {
   .linha-lead, .cabecalho-lista { grid-template-columns: 1fr 1fr; }
   .linha-lead .telefone { display: none; }
   .cabecalho-lista > :nth-child(2) { display: none; }
-  header.hero .conteudo { align-items: flex-start; }
-  header.hero h1 { font-size: 24px; }
+  header.hero h1 { font-size: 28px; }
+  header.hero { padding: 20px 16px 40px; }
   .cartao { padding: 20px; }
   .container { padding: 0 16px 60px; }
   #sim-input-area { flex-direction: column; }
   #sim-input-area input { flex: none; width: 100%; }
   #sim-input-area button { width: 100%; }
-
-  /* fundo fixo trava/pisca em vários navegadores de celular - vira
-     fundo normal (rola junto) só nessa faixa de tela */
   body { background-attachment: scroll; }
 }

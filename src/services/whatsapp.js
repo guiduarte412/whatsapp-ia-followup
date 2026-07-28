@@ -33,4 +33,16 @@ async function avisarConsultor(texto) {
   return enviarMensagem(numero, texto);
 }
 
-module.exports = { enviarMensagem, avisarConsultor };
+// Formato padrao dos avisos que envolvem um lead - sempre com nome, numero
+// e horario, pra voce nao precisar abrir o painel pra saber quem e/quando.
+function formatarAvisoLead({ nome, telefone, contexto }) {
+  const horario = new Date().toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `Lead: ${nome || 'sem nome'}\nNúmero: ${telefone}\nHorário: ${horario}\n\n${contexto}`;
+}
+
+module.exports = { enviarMensagem, avisarConsultor, formatarAvisoLead };

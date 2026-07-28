@@ -186,7 +186,15 @@ ${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : 'Consultor (IA)'}: 
   const textoCru = await chamarClaude(systemPrompt, userPrompt, 300);
 
   try {
-    const parsed = JSON.parse(textoCru);
+    //As vezes o modelo devolve o JSON dentro de um bloco ```json ... ```
+    // ou com algum texto solto antes/depois, mesmo com instrucao pra nao
+    // fazer isso. Em vez de exigir JSON puro, extrai só o trecho entre a
+    // primeira { e a ultima } antes de tentar interpretar.
+    const inicio = textoCru.indexOf('{');
+    const fim = textoCru.lastIndexOf('}');
+    const jsonLimpo = inicio !== -1 && fim !== -1 ? textoCru.slice(inicio, fim + 1) : textoCru;
+
+    const parsed = JSON.parse(jsonLimpo);
     return {
       resposta: parsed.resposta,
       encaminharHumano: Boolean(parsed.encaminhar_humano),
@@ -194,8 +202,8 @@ ${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : 'Consultor (IA)'}: 
       resumoParaConsultor: parsed.resumo_para_consultor || null,
     };
   } catch (erro) {
-    // Se a IA nao devolver um JSON valido (raro, mas pode acontecer),
-    // joga pro humano por seguranca em vez de arriscar mandar algo errado.
+    // Se mesmo assim nao der pra interpretar, joga pro humano por
+    // seguranca em vez de arriscar mandar algo errado.
     return {
       resposta: null,
       encaminharHumano: true,

@@ -7,43 +7,65 @@ dentro de limites bem definidos, e só te chama quando é hora de você entrar.
 
 ## O site
 
-Além dos webhooks, o próprio servidor já serve um site completo, com a
-identidade visual da Fourcon | FourAgro:
+O servidor serve um site único (uma página só, sem recarregar ao navegar),
+com a identidade visual da Fourcon | FourAgro — fundo com a foto real do
+site, paleta branco/preto/laranja.
 
-- **`/` (ou `/index.html`)** — lista todos os leads, com status e progresso
-  da sequência. De lá dá pra **exportar todos os leads em Excel** ou
-  **importar uma planilha** (colunas `Nome`, `Telefone`, `Produto`) pra
-  criar vários leads de uma vez — mesmo formato de planilha que você já usa
-  pra outras listas de chamada.
-- **`/novo.html`** — formulário pra adicionar um lead manualmente e já
-  iniciar a sequência de follow-up. Alternativa ao webhook do RD Station —
-  jogue o lead aqui assim que desligar de uma ligação sem retorno, e leve
-  pro RD Station por fora, do seu jeito.
-- **`/testar.html`** (botão "Testar mensagem", abre em aba nova) — três
-  abas:
+**Acesso protegido por código:** ao abrir o site, pede um código de 6
+dígitos antes de mostrar qualquer coisa (padrão: `059597`). Pra trocar o
+código, usa o botão **"Código de acesso"** no topo — pede uma palavra-chave
+mestra (`KAMILLY`, fixa no código do servidor) pra confirmar a troca. O
+código fica salvo no Volume do Railway, sobrevive a deploys.
+
+Navegação (tudo na mesma página, cada seção com botão **"← Voltar"**):
+
+- **Leads** (tela inicial) — lista todos os leads, com status e progresso
+  da sequência. Tem **Exportar Excel** e **Importar Excel** (colunas
+  `Nome`, `Telefone`, `Produto`) pra criar vários leads de uma vez — mesmo
+  formato de planilha que você já usa pra outras listas de chamada.
+- **+ Novo lead** — formulário pra adicionar um lead manualmente e já
+  iniciar a sequência de follow-up. Alternativa ao webhook do RD Station.
+- **Testar mensagem** — três abas:
   - **Mensagem única**: gera uma mensagem com a IA de verdade e manda pro
-    número que você informar (sem criar lead nem entrar na sequência real)
-    — pra ver como chega no WhatsApp de verdade.
+    número que você informar (sem criar lead nem entrar na sequência real).
   - **Conversa no WhatsApp**: cria um lead marcado com selo **TESTE** e já
     manda a primeira mensagem pro número que você informar. Dali em diante
     você responde normalmente pelo seu WhatsApp — a conversa segue o
-    caminho real (mesmo webhook que um lead de verdade usa), testando a
-    IA e a integração com a Z-API ao mesmo tempo. Acompanhe pelo
-    `/lead.html` do próprio lead, e remova quando terminar (botão
-    "Remover lead" na página de detalhe).
+    caminho real (mesmo webhook que um lead de verdade usa).
   - **Simular na tela**: mesma ideia, mas sem tocar no WhatsApp - você
-    digita o que o lead responderia e vê a IA reagir direto na tela,
-    turno a turno.
-- **`/topicos.html`** (botão "Editar tópicos") — uma caixa de texto por
-  segmento (agro, imóveis, caminhões, crédito empresarial) onde você escreve
-  o que a IA pode mencionar sobre cada produto. Salva na hora, sem precisar
-  mexer em código.
-- **`/lead.html?telefone=...`** — clique num lead na lista pra ver a
-  conversa inteira.
+    digita o que o lead responderia e vê a IA reagir turno a turno.
+- **Editar tópicos** — uma caixa de texto por segmento (agro, imóveis,
+  caminhões, crédito empresarial) onde você escreve o que a IA pode
+  mencionar sobre cada produto. Salva na hora, sem precisar mexer em código.
+- **CRM** — guarda a chave da API do RD Station (ou outro CRM) e a URL base,
+  pra vincular futuramente. Por enquanto só fica salva (o site nunca devolve
+  a chave em claro depois de salva, só indica que existe uma) — nenhuma
+  integração automática usa isso ainda, é só a base pronta pra quando for
+  construída.
+- **Relatório diário** — escolhe uma data, gera um resumo por lead (novo
+  hoje, quantas mensagens foram enviadas, quantas respostas do lead, status
+  atual) e exporta em Excel — pronto pra repassar no CRM manualmente.
+- Clicar num lead na lista abre a conversa inteira, com botão **Remover
+  lead**.
 
 Assim que a Fase 5 (Railway) estiver no ar, é só abrir a própria URL do
 serviço no navegador (`https://SEU-PROJETO.up.railway.app`) — o site já
 aparece ali, não precisa de nenhuma configuração extra.
+
+## Avisos pro consultor
+
+Toda vez que a IA encaminha um lead pra você (ou quando o lead te manda uma
+mensagem nova depois de já estar com você), você recebe um aviso no
+WhatsApp `CONSULTOR_WHATSAPP` (hoje configurado pra `5547992412727`, ajuste
+nas Variables do Railway se precisar trocar) sempre no mesmo formato:
+
+```
+Lead: <nome>
+Número: <telefone>
+Horário: <dia/mês hora:minuto>
+
+<motivo/contexto>
+```
 
 ## Como o fluxo funciona
 
@@ -54,7 +76,7 @@ aparece ali, não precisa de nenhuma configuração extra.
    pelo seu WhatsApp (via Z-API) e agenda a próxima.
 5. Quando o lead responde, a sequência de follow-up para e a IA passa a
    **conversar diretamente** com ele, usando só os tópicos que você
-   cadastrou em `/topicos.html` — nunca inventando valor, prazo ou condição.
+   cadastrou na seção Editar tópicos — nunca inventando valor, prazo ou condição.
 6. A IA encaminha a conversa pra você (avisa no seu WhatsApp) assim que
    qualquer uma dessas situações acontece:
    - o lead pede um valor/condição que não está nos tópicos cadastrados;
@@ -79,7 +101,7 @@ aparece ali, não precisa de nenhuma configuração extra.
    fica marcado como "nutrição futura".
 
 Um ponto de atenção: como a IA agora conversa de verdade (não só manda
-mensagens fixas), o conteúdo cadastrado em `/topicos.html` importa mais
+mensagens fixas), o conteúdo cadastrado nos tópicos importa mais
 ainda — é o que impede ela de improvisar sobre valores e condições do
 consórcio.
 
@@ -98,7 +120,7 @@ retreinado.
 
 Duas coisas ficam totalmente editáveis pelo site, sem mexer em código:
 
-- **`/topicos.html`** — uma caixa de texto por segmento (agro, imóveis,
+- **seção "Editar tópicos" no site** — uma caixa de texto por segmento (agro, imóveis,
   caminhões, crédito empresarial) só pra situar o lead sobre qual produto
   ele pediu. Nada de valor, prazo ou condição — isso é sempre explicado na
   ligação, nunca por mensagem.
@@ -114,7 +136,7 @@ Uma terceira coisa, mais técnica, fica no código:
   GitHub (abre o arquivo, clica no lápis, edita, comita) — o Railway
   atualiza sozinho.
 
-Antes de usar com um lead de verdade, use o **`/testar.html`** pra ver
+Antes de usar com um lead de verdade, use a seção **"Testar mensagem"** no site pra ver
 exatamente que texto a IA gera e como ele chega no WhatsApp.
 
 O objetivo de toda mensagem, do jeito que você descreveu, é sempre marcar
@@ -207,18 +229,17 @@ src/
     leads-api.js               # lista/cria leads, importação em lote
     topicos-api.js             # lê/salva os tópicos usados pela IA
     teste-api.js                # gera mensagem de teste + simulação de conversa completa
+    acesso-api.js               # verifica/troca o código de acesso ao site
+    crm-api.js                  # guarda a chave de integração com o CRM
   services/
     claude.js                  # gera a mensagem humanizada
     whatsapp.js                # envia mensagem via Z-API
     scheduler.js               # controla a cadência 2x/dia por 3 dias
   db/
-    store.js                   # guarda leads, tópicos e exemplos de sucesso
+    store.js                   # guarda leads, tópicos, código de acesso e exemplos de sucesso
 public/
-  index.html                  # painel de leads (+ exportar/importar Excel)
-  novo.html                   # formulário de novo lead
-  testar.html                 # teste de mensagem antes de lançar
-  topicos.html                # edição dos tópicos da IA
-  lead.html                   # conversa de um lead
+  index.html                  # site inteiro (todas as seções, navegação por hash)
+  app.js                      # toda a lógica do site (roteamento, formulários, etc)
   estilo.css                  # identidade visual Fourcon | FourAgro
 data/
   db.json                      # "banco de dados" simples em arquivo

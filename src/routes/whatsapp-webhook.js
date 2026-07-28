@@ -1,6 +1,6 @@
 const express = require('express');
 const { getLead, upsertLead, appendConversa, appendExample } = require('../db/store');
-const { avisarConsultor, enviarMensagem } = require('../services/whatsapp');
+const { avisarConsultor, enviarMensagem, formatarAvisoLead } = require('../services/whatsapp');
 const { responderConversa } = require('../services/claude');
 
 const router = express.Router();
@@ -29,7 +29,11 @@ router.post('/whatsapp', express.json(), async (req, res) => {
   // mensagem nova, pra nao atropelar uma conversa que o consultor ja assumiu.
   if (lead.status === 'human_handoff') {
     appendConversa(telefone, { de: 'lead', texto: textoRecebido });
-    await avisarConsultor(`Nova mensagem de ${lead.nome || telefone}: "${textoRecebido}"`);
+    await avisarConsultor(formatarAvisoLead({
+      nome: lead.nome,
+      telefone,
+      contexto: `Nova mensagem: "${textoRecebido}"`,
+    }));
     return res.status(200).json({ ok: true });
   }
 
@@ -58,9 +62,11 @@ router.post('/whatsapp', express.json(), async (req, res) => {
 
   if (respostasAutomaticas > MAX_RESPOSTAS_AUTOMATICAS) {
     upsertLead(telefone, { status: 'human_handoff' });
-    await avisarConsultor(
-      `Lead ${lead.nome || telefone} passou de ${MAX_RESPOSTAS_AUTOMATICAS} respostas automaticas. Assuma a conversa por aqui.`
-    );
+    await avisarConsultor(formatarAvisoLead({
+      nome: lead.nome,
+      telefone,
+      contexto: `Passou de ${MAX_RESPOSTAS_AUTOMATICAS} respostas automáticas seguidas. Assuma a conversa por aqui.`,
+    }));
     return res.status(200).json({ ok: true });
   }
 
@@ -80,10 +86,11 @@ router.post('/whatsapp', express.json(), async (req, res) => {
   if (resultado.encaminharHumano) {
     upsertLead(telefone, { status: 'human_handoff', respostasAutomaticas });
     const contexto = resultado.resumoParaConsultor || resultado.motivo || 'a IA identificou que é hora de assumir';
-    await avisarConsultor(
-      `Lead ${lead.nome || telefone} precisa de você: ${contexto}.\n` +
-        `Última mensagem do lead: "${textoRecebido}"`
-    );
+    await avisarConsultor(formatarAvisoLead({
+      nome: lead.nome,
+      telefone,
+      contexto: `${contexto}\nÚltima mensagem do lead: "${textoRecebido}"`,
+    }));
   } else {
     upsertLead(telefone, { status: 'conversa_ia', respostasAutomaticas });
   }
