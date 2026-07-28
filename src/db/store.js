@@ -47,6 +47,35 @@ function getLead(phone) {
   return db.leads[phone] || null;
 }
 
+// Numeros brasileiros de celular tem 9 digitos depois do DDD (55 + DDD +
+// 9XXXXXXXX), mas a Z-API (e o WhatsApp por baixo) as vezes reporta o
+// numero SEM esse 9 extra (55 + DDD + XXXXXXXX). Pra nao perder o lead
+// por causa disso, tenta as duas variantes antes de desistir.
+function variantesTelefoneBR(telefone) {
+  if (!telefone || !telefone.startsWith('55') || telefone.length < 12) return [telefone];
+  const ddd = telefone.slice(2, 4);
+  const resto = telefone.slice(4);
+  if (resto.length === 9 && resto[0] === '9') {
+    return [telefone, `55${ddd}${resto.slice(1)}`];
+  }
+  if (resto.length === 8) {
+    return [telefone, `55${ddd}9${resto}`];
+  }
+  return [telefone];
+}
+
+// Como getLead, mas tenta tambem a variante com/sem o 9º digito antes de
+// considerar que o lead nao existe. Usar essa versao em qualquer lugar que
+// recebe telefone vindo de fora (webhook), nao do que o proprio sistema
+// gerou.
+function getLeadFlexivel(telefone) {
+  for (const variante of variantesTelefoneBR(telefone)) {
+    const lead = getLead(variante);
+    if (lead) return lead;
+  }
+  return null;
+}
+
 function upsertLead(phone, data) {
   const db = load();
   db.leads[phone] = { ...(db.leads[phone] || {}), ...data, phone };
@@ -193,6 +222,7 @@ function alterarCodigoAcesso(palavraChave, novoCodigo) {
 
 module.exports = {
   getLead,
+  getLeadFlexivel,
   upsertLead,
   getActiveSequenceLeads,
   getAllLeads,

@@ -1,5 +1,5 @@
 const express = require('express');
-const { getLead, upsertLead, appendConversa, appendExample } = require('../db/store');
+const { getLeadFlexivel, upsertLead, appendConversa, appendExample } = require('../db/store');
 const { avisarConsultor, enviarMensagem, formatarAvisoLead } = require('../services/whatsapp');
 const { responderConversa } = require('../services/claude');
 
@@ -25,25 +25,32 @@ router.post('/whatsapp', express.json(), async (req, res) => {
   // logs do Railway (Deployments -> View Logs) e ajustar os campos abaixo.
   console.log('Webhook WhatsApp recebido:', JSON.stringify(payload));
 
-  const telefone = normalizarTelefone(payload?.phone || payload?.from);
+  // telefoneRecebido: exatamente o que a Z-API mandou agora - usado pra
+  // responder (formato que ela acabou de confirmar que alcança o chat).
+  // telefoneLead (definido abaixo): o numero que ja esta salvo no lead -
+  // usado em todas as operacoes de banco, pra nunca duplicar o registro
+  // por causa do 9º digito (ver getLeadFlexivel).
+  const telefoneRecebido = normalizarTelefone(payload?.phone || payload?.from);
   const textoRecebido = payload?.text?.message || payload?.message;
 
-  if (!telefone) return res.status(400).json({ erro: 'telefone nao encontrado no payload' });
+  if (!telefoneRecebido) return res.status(400).json({ erro: 'telefone nao encontrado no payload' });
 
-  const lead = getLead(telefone);
+  const lead = getLeadFlexivel(telefoneRecebido);
   if (!lead) {
-    console.log(`Nenhum lead encontrado pro telefone ${telefone} - mensagem ignorada.`);
+    console.log(`Nenhum lead encontrado pro telefone ${telefoneRecebido} - mensagem ignorada.`);
     return res.status(200).json({ ok: true }); // mensagem de numero fora do fluxo, ignora
   }
+
+  const telefoneLead = lead.phone;
 
   try {
     // Se ja esta com humano, a IA nao interfere mais - so avisa que chegou
     // mensagem nova, pra nao atropelar uma conversa que o consultor ja assumiu.
     if (lead.status === 'human_handoff') {
-      appendConversa(telefone, { de: 'lead', texto: textoRecebido });
+      appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
       await avisarConsultor(formatarAvisoLead({
         nome: lead.nome,
-        telefone,
+        telefone: telefoneLead,
         contexto: `Nova mensagem: "${textoRecebido}"`,
       }));
       return res.status(200).json({ ok: true });
@@ -63,20 +70,20 @@ router.post('/whatsapp', express.json(), async (req, res) => {
           mensagem: ultimaMensagem,
           tentativa: lead.attemptsSent,
           responded: true,
-          phone: telefone,
+          phone: telefoneLead,
         });
       }
     }
 
-    appendConversa(telefone, { de: 'lead', texto: textoRecebido });
-    const leadAtualizado = getLead(telefone);
+    appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
+    const leadAtualizado = getLeadFlexivel(telefoneLead);
     const respostasAutomaticas = (leadAtualizado.respostasAutomaticas || 0) + 1;
 
     if (respostasAutomaticas > MAX_RESPOSTAS_AUTOMATICAS) {
-      upsertLead(telefone, { status: 'human_handoff' });
+      upsertLead(telefoneLead, { status: 'human_handoff' });
       await avisarConsultor(formatarAvisoLead({
         nome: lead.nome,
-        telefone,
+        telefone: telefoneLead,
         contexto: `Passou de ${MAX_RESPOSTAS_AUTOMATICAS} respostas automáticas seguidas. Assuma a conversa por aqui.`,
       }));
       return res.status(200).json({ ok: true });
@@ -90,21 +97,22 @@ router.post('/whatsapp', express.json(), async (req, res) => {
 
     // Manda a resposta pro lead em qualquer um dos dois casos - a IA sempre
     // deixa uma mensagem educada antes de encaminhar, nunca some sem responder.
+    // Usa telefoneRecebido pra enviar (formato que a Z-API acabou de confirmar).
     if (resultado.resposta) {
-      await enviarMensagem(telefone, resultado.resposta);
-      appendConversa(telefone, { de: 'ia', texto: resultado.resposta });
+      await enviarMensagem(telefoneRecebido, resultado.resposta);
+      appendConversa(telefoneLead, { de: 'ia', texto: resultado.resposta });
     }
 
     if (resultado.encaminharHumano) {
-      upsertLead(telefone, { status: 'human_handoff', respostasAutomaticas });
+      upsertLead(telefoneLead, { status: 'human_handoff', respostasAutomaticas });
       const contexto = resultado.resumoParaConsultor || resultado.motivo || 'a IA identificou que é hora de assumir';
       await avisarConsultor(formatarAvisoLead({
         nome: lead.nome,
-        telefone,
+        telefone: telefoneLead,
         contexto: `${contexto}\nÚltima mensagem do lead: "${textoRecebido}"`,
       }));
     } else {
-      upsertLead(telefone, { status: 'conversa_ia', respostasAutomaticas });
+      upsertLead(telefoneLead, { status: 'conversa_ia', respostasAutomaticas });
     }
 
     res.status(200).json({ ok: true });
@@ -112,7 +120,7 @@ router.post('/whatsapp', express.json(), async (req, res) => {
     // Se algo quebrar no meio do processo (Claude API fora do ar, Z-API
     // rejeitando o envio, etc), loga o erro em vez de deixar cair em
     // silencio - senao voce nunca saberia que a conversa travou.
-    console.error(`Erro processando resposta do lead ${telefone}:`, erro.message);
+    console.error(`Erro processando resposta do lead ${telefoneLead}:`, erro.message);
     res.status(200).json({ ok: true }); // responde 200 pra Z-API nao ficar reenviando
   }
 });
