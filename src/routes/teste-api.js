@@ -2,6 +2,7 @@ const express = require('express');
 const { gerarMensagem, responderConversa } = require('../services/claude');
 const { enviarMensagem } = require('../services/whatsapp');
 const { iniciarSequencia, upsertLead, appendConversa } = require('../db/store');
+const { calcularProximoEnvio } = require('../services/scheduler');
 
 const router = express.Router();
 router.use(express.json());
@@ -81,7 +82,11 @@ router.post('/testar-whatsapp', async (req, res) => {
     const texto = await gerarMensagem({ leadNome: nome, produto, tentativa: 1, historico: [] });
     await enviarMensagem(telefone, texto);
     appendConversa(telefone, { de: 'ia', texto });
-    upsertLead(telefone, { attemptsSent: 1, mensagensEnviadas: [texto] });
+    // Como essa 1a mensagem foi mandada na hora (nao no horario sorteado
+    // que o store.js calculou), recalcula quando a 2a deve sair a partir
+    // de agora, seguindo a mesma regra manha/final-de-dia do agendador.
+    const proximoEnvioEm = calcularProximoEnvio(1, new Date());
+    upsertLead(telefone, { attemptsSent: 1, mensagensEnviadas: [texto], proximoEnvioEm });
     res.json({ texto, lead });
   } catch (erro) {
     res.status(500).json({ erro: erro.message || 'falha ao iniciar teste no WhatsApp' });

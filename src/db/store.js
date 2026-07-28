@@ -101,16 +101,21 @@ function getAllLeads() {
 // "teste: true" marca o lead como um teste (aparece com selo TESTE no
 // painel, pra nao confundir com lead real).
 function iniciarSequencia(phone, { nome, produto, teste }) {
+  const agora = new Date();
+  // 1a mensagem: 30 a 60 min depois do lead entrar (sorteado, nunca fixo).
+  const primeiroEnvioEm = new Date(agora.getTime() + (30 + Math.random() * 30) * 60_000).toISOString();
+
   return upsertLead(phone, {
     nome,
     produto,
     teste: Boolean(teste),
     status: 'sequence_active',
-    sequenceStartedAt: new Date().toISOString(),
+    sequenceStartedAt: agora.toISOString(),
     attemptsSent: 0,
     mensagensEnviadas: [],
     respostasAutomaticas: 0,
     conversa: [],
+    proximoEnvioEm: primeiroEnvioEm,
   });
 }
 

@@ -3,10 +3,43 @@ const { getActiveSequenceLeads, upsertLead, appendExample, appendConversa } = re
 const { gerarMensagem } = require('./claude');
 const { enviarMensagem, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
 
-// A sequencia tem 6 envios (2 por dia x 3 dias). Aqui vao os horarios-alvo
-// em "horas desde o inicio da sequencia" - variados de propósito (nao e
-// sempre a mesma hora exata) pra nao parecer disparo automatico identico.
-const HORAS_DESDE_INICIO = [5, 9, 24, 29, 48, 53];
+// A sequencia tem 6 envios (2 por dia x 3 dias):
+// - a 1a mensagem (assim que o lead entra) sai entre 30 e 60 min depois,
+//   sorteado - isso e calculado em store.js na hora que o lead e criado.
+// - a partir dai, as mensagens alternam entre um horario de manha e um de
+//   final de dia, sempre no proximo dia disponivel - nunca duas mensagens
+//   "de manha" ou "de final de dia" seguidas.
+const MANHA_HORA = Number(process.env.HORA_MANHA || 9);
+const FIM_DIA_HORA = Number(process.env.HORA_FIM_DIA || 18);
+const BRASILIA_OFFSET_MS = 3 * 3_600_000; // Brasilia = UTC-3, sem horario de verao desde 2019
+
+// Acha o proximo momento em que sao "horaAlvo:00" no horario de Brasilia,
+// estritamente depois de "apos" (timestamp em ms). Funciona em qualquer
+// fuso que o servidor estiver rodando (Railway roda em UTC por padrao).
+function proximoHorarioBrasilia(horaAlvo, apos) {
+  const apósEmBrasilia = new Date(apos - BRASILIA_OFFSET_MS);
+  const candidato = new Date(Date.UTC(
+    apósEmBrasilia.getUTCFullYear(),
+    apósEmBrasilia.getUTCMonth(),
+    apósEmBrasilia.getUTCDate(),
+    horaAlvo, 0, 0, 0
+  ));
+  if (candidato.getTime() <= apósEmBrasilia.getTime()) {
+    candidato.setUTCDate(candidato.getUTCDate() + 1);
+  }
+  return new Date(candidato.getTime() + BRASILIA_OFFSET_MS);
+}
+
+// Depois de enviar a tentativa N, calcula quando a tentativa N+1 deve sair.
+// Tentativas impares (1, 3, 5) sao seguidas por um envio de "final de dia";
+// tentativas pares (2, 4, 6) sao seguidas por um envio de "manha" (do dia
+// seguinte). Depois da 6a, nao tem proxima.
+function calcularProximoEnvio(tentativaRecemEnviada, quandoEnviou) {
+  if (tentativaRecemEnviada >= 6) return null;
+  const proximaEhFimDeDia = tentativaRecemEnviada % 2 === 1;
+  const horaAlvo = proximaEhFimDeDia ? FIM_DIA_HORA : MANHA_HORA;
+  return proximoHorarioBrasilia(horaAlvo, quandoEnviou.getTime()).toISOString();
+}
 
 function dentroDoHorarioPermitido() {
   // O servidor (Railway) roda em UTC por padrao, nao no horario de Brasilia.
@@ -23,10 +56,7 @@ function dentroDoHorarioPermitido() {
 async function processarLead(lead) {
   const tentativaAtual = (lead.attemptsSent || 0) + 1;
   if (tentativaAtual > 6) return;
-
-  const horasPassadas = (Date.now() - new Date(lead.sequenceStartedAt).getTime()) / 3_600_000;
-  const horaAlvo = HORAS_DESDE_INICIO[tentativaAtual - 1];
-  if (horasPassadas < horaAlvo) return; // ainda nao chegou a hora deste envio
+  if (!lead.proximoEnvioEm || Date.now() < new Date(lead.proximoEnvioEm).getTime()) return;
 
   const mensagem = await gerarMensagem({
     leadNome: lead.nome,
@@ -60,6 +90,7 @@ async function processarLead(lead) {
   appendConversa(lead.phone, { de: 'ia', texto: mensagem });
 
   const mensagensEnviadas = [...(lead.mensagensEnviadas || []), mensagem];
+  const proximoEnvioEm = calcularProximoEnvio(tentativaAtual, new Date());
 
   if (tentativaAtual === 6) {
     // ultima tentativa sem resposta ate aqui -> lead fica marcado para nutricao futura
@@ -75,7 +106,7 @@ async function processarLead(lead) {
       contexto: 'Completou as 6 tentativas sem responder. Fica marcado para nutrição futura.',
     }));
   } else {
-    upsertLead(lead.phone, { attemptsSent: tentativaAtual, mensagensEnviadas });
+    upsertLead(lead.phone, { attemptsSent: tentativaAtual, mensagensEnviadas, proximoEnvioEm });
   }
 }
 
@@ -97,4 +128,4 @@ function iniciar() {
   console.log('Agendador de follow-up iniciado (checagem a cada 15 min).');
 }
 
-module.exports = { iniciar };
+module.exports = { iniciar, calcularProximoEnvio };

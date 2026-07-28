@@ -23,6 +23,7 @@
     <div class="topo">
       <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
       <div class="acoes">
+        <a class="botao secundario" href="#testar">Testar mensagem</a>
         <a class="botao secundario" href="#metricas">Métricas</a>
         <a class="botao secundario" href="#relatorio">Relatório diário</a>
         <a class="botao secundario" href="#crm">CRM</a>
@@ -35,33 +36,22 @@
     <div class="conteudo">
       <p class="eyebrow">Fourcon | FourAgro</p>
       <h1>Leads em acompanhamento <span class="destaque">com Inteligência</span></h1>
-      <div class="acoes">
-        <a class="botao secundario" href="#testar">Testar mensagem</a>
-      </div>
     </div>
   </header>
 
   <main class="container">
 
-    <!-- VIEW: lista de leads -->
+    <!-- VIEW: quadro de leads -->
     <section id="view-leads" class="view">
       <div class="barra-ferramentas">
+        <input type="text" id="busca-telefone" placeholder="Buscar por número de telefone..." style="max-width: 280px;">
         <button class="botao claro" id="btn-exportar">Exportar Excel</button>
         <button class="botao claro" id="btn-importar">Importar Excel</button>
         <input type="file" id="arquivo-importar" accept=".xlsx,.xls" style="display:none">
       </div>
       <div class="sucesso" id="msg-importacao"></div>
-      <div class="painel">
-        <div class="cabecalho-lista">
-          <span>Lead</span>
-          <span>Telefone</span>
-          <span>Produto</span>
-          <span>Status</span>
-          <span>Sequência</span>
-        </div>
-        <div class="lista" id="lista">
-          <div class="vazio">Carregando…</div>
-        </div>
+      <div class="quadro" id="quadro">
+        <div class="vazio">Carregando…</div>
       </div>
     </section>
 

@@ -76,42 +76,87 @@ function rotear() {
 window.addEventListener('hashchange', rotear);
 if (appEl.style.display !== 'none') rotear();
 
-// ===== VIEW: lista de leads =====
+// ===== VIEW: quadro de leads (estilo CRM, colunas por contato) =====
 
-function progressoHtml(tentativas) {
-  let bolas = '';
-  for (let i = 1; i <= 6; i++) {
-    bolas += `<span class="bola ${i <= (tentativas || 0) ? 'ativa' : ''}"></span>`;
+const COLUNAS_QUADRO = [
+  { chave: 'contato1', titulo: '1º contato' },
+  { chave: 'contato2', titulo: '2º contato' },
+  { chave: 'contato3', titulo: '3º contato' },
+  { chave: 'contato4', titulo: '4º contato' },
+  { chave: 'contato5', titulo: '5º contato' },
+  { chave: 'contato6', titulo: '6º contato' },
+  { chave: 'conversando', titulo: 'Conversando' },
+  { chave: 'aguardando', titulo: 'Aguardando você' },
+  { chave: 'reuniao', titulo: 'Reunião agendada' },
+  { chave: 'perdido', titulo: 'Lead perdido' },
+  { chave: 'encerrado_manual', titulo: 'Encerrado' },
+];
+
+// A coluna e sempre calculada a partir do status/tentativas atuais do lead -
+// nao e um campo salvo. Isso e o que faz o card "andar" de coluna sozinho
+// assim que uma mensagem e mandada ou o status muda, sem precisar de
+// nenhuma logica extra pra mover nada.
+function colunaDoLead(lead) {
+  if (lead.status === 'sequence_active') {
+    const n = Math.min(Math.max(lead.attemptsSent || 1, 1), 6);
+    return `contato${n}`;
   }
-  return `<div class="progresso">${bolas}</div>`;
+  if (lead.status === 'conversa_ia') return 'conversando';
+  if (lead.status === 'human_handoff') return 'aguardando';
+  if (lead.status === 'cold_nurture') return 'perdido';
+  if (lead.status === 'encerrado') {
+    return lead.motivoEncerramento === 'horario_confirmado' ? 'reuniao' : 'encerrado_manual';
+  }
+  return 'contato1';
 }
+
+let todosOsLeads = [];
 
 async function carregarLeads() {
-  const lista = document.getElementById('lista');
+  const quadro = document.getElementById('quadro');
   try {
     const resp = await fetch('/api/leads');
-    // Leads encerrados (horário confirmado ou você assumiu manualmente)
-    // saem da lista principal, mas continuam nos dados pro relatório.
-    const leads = (await resp.json()).filter((l) => l.status !== 'encerrado');
-
-    if (!leads.length) {
-      lista.innerHTML = '<div class="vazio">Nenhum lead ainda. Adicione o primeiro depois de uma ligação sem retorno.</div>';
-      return;
-    }
-
-    lista.innerHTML = leads.map((lead) => `
-      <a class="linha-lead" href="#lead/${encodeURIComponent(lead.phone)}">
-        <span class="nome">${lead.nome || '—'}${lead.teste ? '<span class="selo-teste">TESTE</span>' : ''}</span>
-        <span class="telefone">${lead.phone}</span>
-        <span class="produto">${LABELS_PRODUTO[lead.produto] || lead.produto || '—'}</span>
-        <span class="status ${lead.status}"><span class="ponto"></span>${LABELS_STATUS[lead.status] || lead.status}</span>
-        ${progressoHtml(lead.attemptsSent)}
-      </a>
-    `).join('');
+    todosOsLeads = await resp.json();
+    renderizarQuadro();
   } catch (erro) {
-    lista.innerHTML = '<div class="vazio">Não consegui carregar os leads agora.</div>';
+    quadro.innerHTML = '<div class="vazio">Não consegui carregar os leads agora.</div>';
   }
 }
+
+function renderizarQuadro() {
+  const quadro = document.getElementById('quadro');
+  const termoBusca = (document.getElementById('busca-telefone').value || '').replace(/\D/g, '');
+  const leads = termoBusca ? todosOsLeads.filter((l) => l.phone.includes(termoBusca)) : todosOsLeads;
+
+  if (!todosOsLeads.length) {
+    quadro.innerHTML = '<div class="vazio">Nenhum lead ainda. Adicione o primeiro depois de uma ligação sem retorno.</div>';
+    return;
+  }
+  if (termoBusca && !leads.length) {
+    quadro.innerHTML = '<div class="vazio">Nenhum lead encontrado com esse número.</div>';
+    return;
+  }
+
+  quadro.innerHTML = COLUNAS_QUADRO.map((coluna) => {
+    const cartoes = leads.filter((l) => colunaDoLead(l) === coluna.chave);
+    return `
+      <div class="coluna">
+        <div class="coluna-titulo"><span>${coluna.titulo}</span><span>${cartoes.length}</span></div>
+        <div class="coluna-cartoes">
+          ${cartoes.length ? cartoes.map((lead) => `
+            <a class="cartao-lead" href="#lead/${encodeURIComponent(lead.phone)}">
+              <span class="nome">${lead.nome || '—'}${lead.teste ? '<span class="selo-teste">TESTE</span>' : ''}</span>
+              <span class="telefone">${lead.phone}</span>
+              <span class="produto-card">${LABELS_PRODUTO[lead.produto] || lead.produto || '—'}</span>
+            </a>
+          `).join('') : '<p style="font-size:12px; color:var(--texto-fraco); padding:6px 4px;">Vazio</p>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+document.getElementById('busca-telefone').addEventListener('input', renderizarQuadro);
 
 document.getElementById('btn-exportar').addEventListener('click', async () => {
   const resp = await fetch('/api/leads');

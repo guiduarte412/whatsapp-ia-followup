@@ -2,9 +2,11 @@
 
 Sistema que assume o follow-up de um lead **depois** que você já ligou e não
 conseguiu atendimento. Manda mensagem humanizada 2x por dia, por 3 dias (6
-mensagens no total). Se o lead responder, a IA continua a conversa sozinha
-(em primeira pessoa, como se fosse você mesmo escrevendo) dentro de limites
-bem definidos, e só te chama quando é hora de você entrar.
+mensagens no total) — a 1ª mensagem sai já na 1ª hora depois do lead entrar,
+a 2ª entre 30 e 60 minutos depois (sempre variando, nunca um horário fixo).
+Se o lead responder, a IA continua a conversa sozinha (em primeira pessoa,
+como se fosse você mesmo escrevendo) dentro de limites bem definidos, e só
+te chama quando é hora de você entrar.
 
 ## O site
 
@@ -21,11 +23,14 @@ código fica salvo no Volume do Railway, sobrevive a deploys.
 
 Navegação (tudo na mesma página, cada seção com botão **"← Voltar"**):
 
-- **Leads** (tela inicial) — lista todos os leads **em andamento** (leads
-  encerrados saem daqui automaticamente, ver abaixo), com status e
-  progresso da sequência. Tem **Exportar Excel** e **Importar Excel**
-  (colunas `Nome`, `Telefone`, `Produto`) pra criar vários leads de uma
-  vez.
+- **Leads** (tela inicial) — quadro estilo CRM (igual o funil do RD
+  Station), com uma coluna pra cada tentativa de contato (1ª a 6ª),
+  **Conversando**, **Aguardando você**, **Reunião agendada** e **Lead
+  perdido**. O card do lead muda de coluna sozinho conforme o status e o
+  número de mensagens já enviadas mudam — não é um campo separado que
+  precisa ser atualizado à mão, é calculado toda vez que a tela carrega.
+  Tem **busca por número de telefone** (filtra o quadro em tempo real) e
+  **Exportar/Importar Excel** (colunas `Nome`, `Telefone`, `Produto`).
 - **+ Novo lead** — formulário pra adicionar um lead manualmente e já
   iniciar a sequência de follow-up. Alternativa ao webhook do RD Station.
 - **Testar mensagem** — três abas: Mensagem única, Conversa no WhatsApp
@@ -89,6 +94,24 @@ Horário: <dia/mês hora:minuto>
 3. O RD Station dispara um webhook pra este sistema.
 4. O sistema começa a sequência: gera uma mensagem com a Claude API, manda
    pelo seu WhatsApp (via Z-API) e agenda a próxima.
+
+**Cronograma das 6 mensagens:**
+
+| Mensagem | Quando sai |
+|---|---|
+| 1ª | 30-60 min depois do lead entrar (sorteado, nunca fixo) |
+| 2ª | Final do dia (18h Brasília, configurável em `HORA_FIM_DIA`) — do mesmo dia, se ainda houver tempo, senão do dia seguinte |
+| 3ª | Manhã do dia seguinte (9h Brasília, configurável em `HORA_MANHA`) |
+| 4ª | Final do dia, mesmo dia da 3ª |
+| 5ª | Manhã do dia seguinte |
+| 6ª | Final do dia, mesmo dia da 5ª |
+
+Ou seja: a 1ª mensagem é a resposta rápida logo após o lead entrar, e a
+partir da 2ª o padrão vira sempre **uma de manhã + uma no final do dia**,
+como uma esteira andando dia a dia. Tudo isso dentro da janela de horário
+permitido (8h-20h por padrão, configurável em `HORARIO_INICIO`/
+`HORARIO_FIM`) — se cair fora, espera a janela abrir de novo.
+
 5. Quando o lead responde, a sequência de follow-up para e a IA passa a
    **conversar diretamente** com ele, usando só os tópicos que você
    cadastrou na seção Editar tópicos — nunca inventando valor, prazo ou condição.

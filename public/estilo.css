@@ -190,7 +190,66 @@ header.hero .acoes {
 }
 .cartao.largo { max-width: 640px; }
 
-/* --- Lista de leads --- */
+/* --- Quadro estilo CRM (colunas por contato) --- */
+
+.quadro {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 4px 4px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.coluna {
+  flex: 0 0 220px;
+  background: var(--painel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+}
+
+.coluna-titulo {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid var(--linha);
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.coluna-cartoes {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cartao-lead {
+  display: block;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-decoration: none;
+  color: var(--branco);
+  transition: background 0.12s ease;
+}
+.cartao-lead:hover { background: rgba(255,255,255,0.14); }
+.cartao-lead .nome { font-weight: 600; font-size: 13px; display: block; }
+.cartao-lead .telefone { font-family: var(--font-mono); font-size: 11px; color: var(--texto-fraco); display: block; margin-top: 3px; }
+.cartao-lead .produto-card { font-size: 11px; color: var(--texto-fraco); display: block; margin-top: 3px; text-transform: capitalize; }
+
+/* --- Lista de leads (usada no relatório) --- */
 
 .lista { border-top: 1px solid var(--linha); }
 
