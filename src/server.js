@@ -4,6 +4,8 @@ const express = require('express');
 const rdstationWebhook = require('./routes/rdstation-webhook');
 const whatsappWebhook = require('./routes/whatsapp-webhook');
 const leadsApi = require('./routes/leads-api');
+const topicosApi = require('./routes/topicos-api');
+const testeApi = require('./routes/teste-api');
 const scheduler = require('./services/scheduler');
 
 const app = express();
@@ -11,6 +13,8 @@ const app = express();
 app.use('/webhooks', rdstationWebhook);
 app.use('/webhooks', whatsappWebhook);
 app.use('/api', leadsApi);
+app.use('/api', topicosApi);
+app.use('/api', testeApi);
 
 // Site simples pra adicionar leads manualmente e ver o andamento -
 // arquivos em /public, sem build step, só HTML/CSS/JS puro.

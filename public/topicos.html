@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tópicos da IA — Fourcon | FourAgro</title>
+<link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+<header class="hero">
+  <div class="conteudo">
+    <div>
+      <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
+      <p class="marca">Fourcon | FourAgro</p>
+      <h1>O que a IA pode falar</h1>
+    </div>
+    <div class="acoes">
+      <a class="botao secundario" href="/index.html">Voltar</a>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <p class="dica" style="margin: 20px 0;">
+    Escreva aqui, por produto, o que a IA pode mencionar pro lead — bem
+    básico, sem valor, prazo ou condição (isso é sempre explicado na
+    ligação). A IA usa só o que estiver escrito aqui, nunca inventa nada
+    fora disso.
+  </p>
+
+  <div class="abas" id="abas"></div>
+
+  <div class="cartao largo">
+    <div class="sucesso" id="sucesso"></div>
+    <div class="campo">
+      <label id="rotulo-campo">Agro/rural</label>
+      <textarea id="texto-topico" placeholder="Ex: Crédito rural, para quem precisa de capital para a propriedade."></textarea>
+    </div>
+    <button class="botao claro" id="btn-salvar">Salvar</button>
+  </div>
+</div>
+
+<script>
+const SEGMENTOS = [
+  { chave: 'agro', rotulo: 'Agro/rural' },
+  { chave: 'imoveis', rotulo: 'Imóveis' },
+  { chave: 'caminhoes', rotulo: 'Caminhões' },
+  { chave: 'credito_empresarial', rotulo: 'Crédito empresarial' },
+  { chave: 'geral', rotulo: 'Geral (produto não identificado)' },
+];
+
+let topicosAtuais = {};
+let segmentoAtivo = 'agro';
+
+const abasEl = document.getElementById('abas');
+const textareaEl = document.getElementById('texto-topico');
+const rotuloEl = document.getElementById('rotulo-campo');
+const sucessoBox = document.getElementById('sucesso');
+
+function renderizarAbas() {
+  abasEl.innerHTML = SEGMENTOS.map((s) => `
+    <button class="aba ${s.chave === segmentoAtivo ? 'ativa' : ''}" data-chave="${s.chave}">${s.rotulo}</button>
+  `).join('');
+
+  abasEl.querySelectorAll('.aba').forEach((botao) => {
+    botao.addEventListener('click', () => {
+      segmentoAtivo = botao.dataset.chave;
+      mostrarSegmento();
+      renderizarAbas();
+    });
+  });
+}
+
+function mostrarSegmento() {
+  const segmento = SEGMENTOS.find((s) => s.chave === segmentoAtivo);
+  rotuloEl.textContent = segmento.rotulo;
+  textareaEl.value = topicosAtuais[segmentoAtivo] || '';
+}
+
+async function carregar() {
+  const resp = await fetch('/api/topicos');
+  topicosAtuais = await resp.json();
+  renderizarAbas();
+  mostrarSegmento();
+}
+
+document.getElementById('btn-salvar').addEventListener('click', async () => {
+  topicosAtuais[segmentoAtivo] = textareaEl.value;
+  const resp = await fetch('/api/topicos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(topicosAtuais),
+  });
+  if (resp.ok) {
+    sucessoBox.textContent = 'Salvo.';
+    sucessoBox.style.display = 'block';
+    setTimeout(() => { sucessoBox.style.display = 'none'; }, 2500);
+  }
+});
+
+carregar();
+</script>
+</body>
+</html>

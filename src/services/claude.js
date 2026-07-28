@@ -1,10 +1,27 @@
 const axios = require('axios');
-const { getRecentSuccessfulExamples } = require('../db/store');
-const { buscarTopicos } = require('../config/topicos');
+const { getRecentSuccessfulExamples, getTopicos } = require('../db/store');
 
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const CONSULTOR_NOME = process.env.CONSULTOR_NOME || 'Guilherme';
 const CONSULTOR_EMPRESA = process.env.CONSULTOR_EMPRESA || 'Fourcon | FourAgro';
+
+// Le o texto livre que o consultor escreveu no site (pagina /topicos.html)
+// pra aquele segmento de produto. E esse texto que vira referencia de
+// conteudo pra IA - nada estruturado, e so o que ele escreveu mesmo.
+function textoDosTopicos(produto) {
+  const topicos = getTopicos();
+  const chave = (produto || '').toLowerCase();
+  let valor;
+  if (chave.includes('agro') || chave.includes('rural')) valor = topicos.agro;
+  else if (chave.includes('imov') || chave.includes('imóv')) valor = topicos.imoveis;
+  else if (chave.includes('caminh') || chave.includes('frota') || chave.includes('veic')) valor = topicos.caminhoes;
+  else if (chave.includes('credit') || chave.includes('crédit') || chave.includes('empresa')) valor = topicos.credito_empresarial;
+  else valor = topicos.geral;
+
+  return valor && valor.trim()
+    ? `Como mencionar o produto (bem por cima, so pra situar o lead - os detalhes ficam pra ligacao):\n${valor.trim()}`
+    : 'Nenhuma descricao basica cadastrada para este produto ainda (pagina /topicos.html no site) - so peça o horario pra ligar, sem citar detalhes do produto.';
+}
 
 // Exemplo real de mensagem que o consultor ja mandou - usado como referencia
 // de tom pra IA escrever parecido, nao generico/robotico.
@@ -26,7 +43,12 @@ mensagem.
 
 Escreva no estilo do consultor. Exemplo real de uma mensagem dele (use como referencia de tom,
 formalidade e estrutura - nao copie literalmente, cada mensagem e de um lead/situacao diferente):
-${EXEMPLO_REAL_DE_TOM}`;
+${EXEMPLO_REAL_DE_TOM}
+
+Regra critica sobre contemplacao: NUNCA prometa, insinue ou de a entender que a contemplacao
+(sorteio ou lance) esta garantida, e um prazo certo, ou e "rapida"/"facil". Contemplacao em
+consorcio e sempre incerta - depende de sorteio ou lance. Isso vale mesmo se o lead perguntar
+diretamente ou insistir.`;
 
 // Numero da tentativa (1 a 6) define o tom da mensagem.
 // Isso implementa a cadencia: 2 mensagens/dia por 3 dias.
@@ -51,10 +73,7 @@ async function gerarMensagem({ leadNome, produto, tentativa, historico }) {
         .join('\n')
     : 'Ainda sem exemplos anteriores registrados.';
 
-  const topicos = buscarTopicos(produto);
-  const topicosTexto = topicos.length
-    ? `Como mencionar o produto (bem por cima, so pra situar o lead - os detalhes ficam pra ligacao):\n${topicos.map((t) => `- ${t}`).join('\n')}`
-    : 'Nenhuma descricao basica cadastrada para este produto ainda (arquivo src/config/topicos.js) - so peça o horario pra ligar, sem citar detalhes do produto.';
+  const topicosTexto = textoDosTopicos(produto);
 
   const systemPrompt = `Voce escreve mensagens de WhatsApp para um consultor financeiro brasileiro
 especializado em consorcio (segmentos: agro/rural, imoveis, caminhoes/veiculos pesados e credito empresarial).
@@ -114,10 +133,7 @@ Historico de mensagens ja enviadas nesta sequencia: ${historico?.length ? histor
 // lead escreveu e decide, a cada turno, se responde ela mesma ou se
 // encaminha pro humano - nunca as duas coisas ao mesmo tempo.
 async function responderConversa({ leadNome, produto, historicoConversa }) {
-  const topicos = buscarTopicos(produto);
-  const topicosTexto = topicos.length
-    ? `Como mencionar o produto (bem por cima, so pra situar o lead - os detalhes ficam pra ligacao):\n${topicos.map((t) => `- ${t}`).join('\n')}`
-    : 'Nenhuma descrição básica cadastrada para este produto ainda (arquivo src/config/topicos.js).';
+  const topicosTexto = textoDosTopicos(produto);
 
   const systemPrompt = `Você é a IA de atendimento inicial de um consultor financeiro brasileiro
 especializado em consórcio (segmentos: agro/rural, imóveis, caminhões/veículos pesados e crédito
@@ -131,13 +147,17 @@ Regras rígidas, sem exceção:
 - NUNCA informe valor de parcela, taxa, prazo de contrato, percentual de entrada ou qualquer
   condição comercial - isso é sempre explicado na ligação, nunca por mensagem, mesmo que esteja
   na lista de tópicos.
+- NUNCA prometa, insinue ou dê a entender que a contemplação (sorteio ou lance) está garantida,
+  tem prazo certo, ou é "rápida"/"fácil" - contemplação é sempre incerta. Se o lead perguntar
+  sobre contemplação, não responda por texto - encaminhe para o consultor.
 - NUNCA confirme fechamento de negócio, nem diga que "está aprovado" ou "garantido".
 - NUNCA prometa ou confirme um horário de ligação em nome do consultor - você não sabe a
   agenda dele. Se o lead propuser ou aceitar um horário para ser contatado, agradeça e diga que
   vai confirmar com o consultor, mas encaminhe para o humano (é ele quem confirma o horário).
-- Se o lead pedir qualquer detalhe de valor/condição, OU pedir para falar com uma pessoa, OU
-  demonstrar que já quer fechar negócio, OU propuser/aceitar um horário de contato, você deve
-  encaminhar para o consultor humano em vez de tentar resolver por texto.
+- Se o lead pedir qualquer detalhe de valor/condição, OU perguntar sobre contemplação, OU
+  pedir para falar com uma pessoa, OU demonstrar que já quer fechar negócio, OU propuser/aceitar
+  um horário de contato, você deve encaminhar para o consultor humano em vez de tentar resolver
+  por texto.
 - Mesmo quando for encaminhar, sempre responda algo educado ao lead antes (nunca deixe ele sem
   resposta) - só não avance a negociação nem confirme compromissos que não são seus para confirmar.
 - Fora dessas situações, converse normalmente: tire dúvidas bem gerais, mantenha o interesse, tom

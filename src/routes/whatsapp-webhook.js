@@ -39,8 +39,10 @@ router.post('/whatsapp', express.json(), async (req, res) => {
     // Primeira vez que esse lead responde -> registra como exemplo de
     // sucesso (alimenta o "aprendizado" descrito no README) e para a
     // sequencia de follow-up (o agendador so processa status sequence_active).
+    // Leads de teste nao entram no aprendizado, pra nao poluir os exemplos
+    // reais com conversa fabricada.
     const ultimaMensagem = (lead.mensagensEnviadas || []).slice(-1)[0];
-    if (ultimaMensagem) {
+    if (ultimaMensagem && !lead.teste) {
       appendExample({
         mensagem: ultimaMensagem,
         tentativa: lead.attemptsSent,

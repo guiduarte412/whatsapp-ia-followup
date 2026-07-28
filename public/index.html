@@ -7,14 +7,29 @@
 <link rel="stylesheet" href="/estilo.css">
 </head>
 <body>
-<div class="container">
-  <header class="topo">
+<header class="hero">
+  <div class="conteudo">
     <div>
+      <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
       <p class="marca">Fourcon | FourAgro</p>
       <h1>Leads em acompanhamento</h1>
     </div>
-    <a class="botao" href="/novo.html">+ Novo lead</a>
-  </header>
+    <div class="acoes">
+      <a class="botao secundario" href="/testar.html" target="_blank" rel="noopener">Testar mensagem</a>
+      <a class="botao secundario" href="/topicos.html">Editar tópicos</a>
+      <a class="botao" href="/novo.html">+ Novo lead</a>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="barra-ferramentas">
+    <button class="botao claro" id="btn-exportar">Exportar Excel</button>
+    <button class="botao claro" id="btn-importar">Importar Excel</button>
+    <input type="file" id="arquivo-importar" accept=".xlsx,.xls" style="display:none">
+  </div>
+
+  <div class="sucesso" id="msg-importacao"></div>
 
   <div class="cabecalho-lista">
     <span>Lead</span>
@@ -29,6 +44,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const LABELS_STATUS = {
   sequence_active: 'Sequência ativa',
@@ -65,7 +81,7 @@ async function carregar() {
 
     lista.innerHTML = leads.map((lead) => `
       <a class="linha-lead" href="/lead.html?telefone=${encodeURIComponent(lead.phone)}">
-        <span class="nome">${lead.nome || '—'}</span>
+        <span class="nome">${lead.nome || '—'}${lead.teste ? ' <span style="font-family: var(--font-mono); font-size: 10px; color: var(--terracotta); border: 1px solid var(--terracotta); padding: 1px 5px; border-radius: 3px; vertical-align: middle;">TESTE</span>' : ''}</span>
         <span class="telefone">${lead.phone}</span>
         <span class="produto">${LABELS_PRODUTO[lead.produto] || lead.produto || '—'}</span>
         <span class="status ${lead.status}"><span class="ponto"></span>${LABELS_STATUS[lead.status] || lead.status}</span>
@@ -76,6 +92,64 @@ async function carregar() {
     lista.innerHTML = '<div class="vazio">Não consegui carregar os leads agora.</div>';
   }
 }
+
+// --- Exportar Excel ---
+document.getElementById('btn-exportar').addEventListener('click', async () => {
+  const resp = await fetch('/api/leads');
+  const leads = await resp.json();
+
+  const linhas = leads.map((l) => ({
+    Nome: l.nome || '',
+    Telefone: l.phone,
+    Produto: LABELS_PRODUTO[l.produto] || l.produto || '',
+    Status: LABELS_STATUS[l.status] || l.status,
+    'Mensagens enviadas': l.attemptsSent || 0,
+    'Início da sequência': l.sequenceStartedAt || '',
+  }));
+
+  const planilha = XLSX.utils.json_to_sheet(linhas);
+  const livro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(livro, planilha, 'Leads');
+  XLSX.writeFile(livro, `leads-fouragro-${new Date().toISOString().slice(0, 10)}.xlsx`);
+});
+
+// --- Importar Excel ---
+const inputArquivo = document.getElementById('arquivo-importar');
+document.getElementById('btn-importar').addEventListener('click', () => inputArquivo.click());
+
+inputArquivo.addEventListener('change', async (evento) => {
+  const arquivo = evento.target.files[0];
+  if (!arquivo) return;
+
+  const dadosArquivo = await arquivo.arrayBuffer();
+  const livro = XLSX.read(dadosArquivo);
+  const primeiraAba = livro.Sheets[livro.SheetNames[0]];
+  const linhas = XLSX.utils.sheet_to_json(primeiraAba);
+
+  // Aceita cabecalhos em português (Nome, Telefone, Produto) - ajuste
+  // livre caso sua planilha use outros nomes de coluna.
+  const leadsParaImportar = linhas.map((linha) => ({
+    nome: linha.Nome || linha.nome || '',
+    telefone: linha.Telefone || linha.telefone || linha.WhatsApp || '',
+    produto: (linha.Produto || linha.produto || 'geral').toString().toLowerCase(),
+  }));
+
+  const resp = await fetch('/api/leads/lote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ leads: leadsParaImportar }),
+  });
+  const resultado = await resp.json();
+
+  const msg = document.getElementById('msg-importacao');
+  msg.style.display = 'block';
+  msg.textContent = resultado.erros?.length
+    ? `${resultado.criados} lead(s) importado(s). ${resultado.erros.length} linha(s) com erro (confira nome/telefone).`
+    : `${resultado.criados} lead(s) importado(s) com sucesso.`;
+
+  inputArquivo.value = '';
+  carregar();
+});
 
 carregar();
 setInterval(carregar, 30000);

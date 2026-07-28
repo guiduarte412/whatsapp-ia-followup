@@ -5,20 +5,41 @@ conseguiu atendimento. Manda mensagem humanizada 2x por dia, por 3 dias (6
 mensagens no total). Se o lead responder, a IA continua a conversa sozinha
 dentro de limites bem definidos, e só te chama quando é hora de você entrar.
 
-## O site pra adicionar leads manualmente
+## O site
 
-Além dos webhooks, o próprio servidor já serve um site simples:
+Além dos webhooks, o próprio servidor já serve um site completo, com a
+identidade visual da Fourcon | FourAgro:
 
 - **`/` (ou `/index.html`)** — lista todos os leads, com status e progresso
-  da sequência (quantas das 6 mensagens já foram enviadas).
-- **`/novo.html`** — formulário pra adicionar um lead manualmente (nome,
-  WhatsApp, produto) e já iniciar a sequência de follow-up. Serve como
-  alternativa ao webhook do RD Station — você pode jogar o lead aqui assim
-  que desliga a ligação sem retorno, e depois levar pro RD Station por fora,
-  do seu jeito.
+  da sequência. De lá dá pra **exportar todos os leads em Excel** ou
+  **importar uma planilha** (colunas `Nome`, `Telefone`, `Produto`) pra
+  criar vários leads de uma vez — mesmo formato de planilha que você já usa
+  pra outras listas de chamada.
+- **`/novo.html`** — formulário pra adicionar um lead manualmente e já
+  iniciar a sequência de follow-up. Alternativa ao webhook do RD Station —
+  jogue o lead aqui assim que desligar de uma ligação sem retorno, e leve
+  pro RD Station por fora, do seu jeito.
+- **`/testar.html`** (botão "Testar mensagem", abre em aba nova) — três
+  abas:
+  - **Mensagem única**: gera uma mensagem com a IA de verdade e manda pro
+    número que você informar (sem criar lead nem entrar na sequência real)
+    — pra ver como chega no WhatsApp de verdade.
+  - **Conversa no WhatsApp**: cria um lead marcado com selo **TESTE** e já
+    manda a primeira mensagem pro número que você informar. Dali em diante
+    você responde normalmente pelo seu WhatsApp — a conversa segue o
+    caminho real (mesmo webhook que um lead de verdade usa), testando a
+    IA e a integração com a Z-API ao mesmo tempo. Acompanhe pelo
+    `/lead.html` do próprio lead, e remova quando terminar (botão
+    "Remover lead" na página de detalhe).
+  - **Simular na tela**: mesma ideia, mas sem tocar no WhatsApp - você
+    digita o que o lead responderia e vê a IA reagir direto na tela,
+    turno a turno.
+- **`/topicos.html`** (botão "Editar tópicos") — uma caixa de texto por
+  segmento (agro, imóveis, caminhões, crédito empresarial) onde você escreve
+  o que a IA pode mencionar sobre cada produto. Salva na hora, sem precisar
+  mexer em código.
 - **`/lead.html?telefone=...`** — clique num lead na lista pra ver a
-  conversa inteira (mensagens da sequência + o que foi trocado depois que
-  o lead respondeu).
+  conversa inteira.
 
 Assim que a Fase 5 (Railway) estiver no ar, é só abrir a própria URL do
 serviço no navegador (`https://SEU-PROJETO.up.railway.app`) — o site já
@@ -32,11 +53,13 @@ aparece ali, não precisa de nenhuma configuração extra.
 4. O sistema começa a sequência: gera uma mensagem com a Claude API, manda
    pelo seu WhatsApp (via Z-API) e agenda a próxima.
 5. Quando o lead responde, a sequência de follow-up para e a IA passa a
-   **conversar diretamente** com ele, usando só os tópicos que você cadastrou
-   em `src/config/topicos.js` — nunca inventando valor, prazo ou condição.
+   **conversar diretamente** com ele, usando só os tópicos que você
+   cadastrou em `/topicos.html` — nunca inventando valor, prazo ou condição.
 6. A IA encaminha a conversa pra você (avisa no seu WhatsApp) assim que
    qualquer uma dessas situações acontece:
    - o lead pede um valor/condição que não está nos tópicos cadastrados;
+   - o lead pergunta sobre contemplação (sorteio/lance) — a IA nunca fala
+     de contemplação por texto, isso é sempre encaminhado;
    - o lead pede explicitamente para falar com uma pessoa;
    - o lead sinaliza que já quer fechar negócio;
    - o lead propõe ou aceita um horário para ser contatado — a IA nunca
@@ -56,8 +79,9 @@ aparece ali, não precisa de nenhuma configuração extra.
    fica marcado como "nutrição futura".
 
 Um ponto de atenção: como a IA agora conversa de verdade (não só manda
-mensagens fixas), o conteúdo do `topicos.js` importa mais ainda — é o que
-impede ela de improvisar sobre valores e condições do consórcio.
+mensagens fixas), o conteúdo cadastrado em `/topicos.html` importa mais
+ainda — é o que impede ela de improvisar sobre valores e condições do
+consórcio.
 
 ## Sobre a IA "aprender junto" — o que isso é de verdade
 
@@ -72,22 +96,26 @@ retreinado.
 
 ## Como controlar o conteúdo das mensagens
 
-Três coisas ficam totalmente editáveis, sem mexer na lógica do sistema:
+Duas coisas ficam totalmente editáveis pelo site, sem mexer em código:
 
-- **`CONSULTOR_NOME` e `CONSULTOR_EMPRESA`** (no `.env`) — nome e empresa que
-  a IA usa pra se apresentar na primeira mensagem, do jeito que você já faz
-  de verdade ("Aqui é o Guilherme, da Fourcon | FourAgro").
-- **`src/config/topicos.js`** — uma frase bem básica por segmento (agro,
-  imóveis, caminhões, crédito empresarial) só pra situar o lead sobre qual
-  produto ele pediu. Nada de valor, prazo ou condição — isso é sempre
-  explicado na ligação, nunca por mensagem.
+- **`/topicos.html`** — uma caixa de texto por segmento (agro, imóveis,
+  caminhões, crédito empresarial) só pra situar o lead sobre qual produto
+  ele pediu. Nada de valor, prazo ou condição — isso é sempre explicado na
+  ligação, nunca por mensagem.
+- **`CONSULTOR_NOME` e `CONSULTOR_EMPRESA`** (no `.env`, no Railway) — nome
+  e empresa que a IA usa pra se apresentar na primeira mensagem, do jeito
+  que você já faz de verdade ("Aqui é o Guilherme, da Fourcon | FourAgro").
+
+Uma terceira coisa, mais técnica, fica no código:
+
 - **`src/services/claude.js`** — tem um exemplo real de mensagem sua
   (`EXEMPLO_REAL_DE_TOM`) usado como referência de tom pra IA escrever
-  parecido com você, não genérico. Pode trocar por outro exemplo seu quando
-  quiser recalibrar.
+  parecido com você, não genérico. Editável direto pela interface do
+  GitHub (abre o arquivo, clica no lápis, edita, comita) — o Railway
+  atualiza sozinho.
 
-Os três são editáveis direto pela interface do GitHub (abre o arquivo,
-clica no lápis, edita, comita) — o Railway atualiza sozinho.
+Antes de usar com um lead de verdade, use o **`/testar.html`** pra ver
+exatamente que texto a IA gera e como ele chega no WhatsApp.
 
 O objetivo de toda mensagem, do jeito que você descreveu, é sempre marcar
 uma ligação ou reunião/chamada de vídeo — os detalhes do consórcio só são
@@ -134,6 +162,24 @@ Mesmo assim, o risco de bloqueio do número existe. Vale considerar um número
 secundário dedicado a isso, separado do seu WhatsApp principal de
 atendimento.
 
+## Configurar o Volume no Railway (não pular esse passo)
+
+O disco padrão do Railway é temporário — some a cada novo deploy. Sem um
+Volume configurado, **toda vez que você atualizar o código, os leads que
+estiverem salvos são apagados**, mesmo os reais. O projeto já está pronto
+pra usar um Volume automaticamente (basta criar um), mas o Volume em si
+precisa ser configurado uma vez, direto no Railway:
+
+1. Dentro do seu projeto no Railway, clique com o botão direito no canvas
+   (ou use o atalho ⌘K / Ctrl+K) e escolha **Create Volume**.
+2. Selecione o serviço `whatsapp-ia-followup` pra anexar o Volume a ele.
+3. No campo de **Mount Path**, digite `/app/data`.
+4. Salve — o Railway reinicia o serviço sozinho (pode dar uma breve pausa,
+   normal).
+
+A partir daí, os leads sobrevivem a qualquer atualização de código. Faça
+isso **antes** de importar sua primeira leva de leads reais.
+
 ## Passo a passo pra colocar no ar
 
 1. `npm install` na pasta do projeto.
@@ -154,18 +200,26 @@ atendimento.
 
 ```
 src/
-  server.js                    # sobe o servidor e o agendador
+  server.js                    # sobe o servidor, o site e o agendador
   routes/
     rdstation-webhook.js       # recebe aviso de "não atendeu" do RD Station
     whatsapp-webhook.js        # recebe resposta do lead, para a sequência
+    leads-api.js               # lista/cria leads, importação em lote
+    topicos-api.js             # lê/salva os tópicos usados pela IA
+    teste-api.js                # gera mensagem de teste + simulação de conversa completa
   services/
     claude.js                  # gera a mensagem humanizada
     whatsapp.js                # envia mensagem via Z-API
     scheduler.js               # controla a cadência 2x/dia por 3 dias
-  config/
-    topicos.js                 # pontos de conteúdo editáveis por segmento
   db/
-    store.js                   # guarda leads e exemplos de sucesso
+    store.js                   # guarda leads, tópicos e exemplos de sucesso
+public/
+  index.html                  # painel de leads (+ exportar/importar Excel)
+  novo.html                   # formulário de novo lead
+  testar.html                 # teste de mensagem antes de lançar
+  topicos.html                # edição dos tópicos da IA
+  lead.html                   # conversa de um lead
+  estilo.css                  # identidade visual Fourcon | FourAgro
 data/
   db.json                      # "banco de dados" simples em arquivo
 ```

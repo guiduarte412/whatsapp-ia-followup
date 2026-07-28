@@ -1,4 +1,11 @@
 {
   "leads": {},
-  "examples": []
+  "examples": [],
+  "topicos": {
+    "agro": "Crédito rural, para quem precisa de capital para a propriedade.",
+    "imoveis": "",
+    "caminhoes": "",
+    "credito_empresarial": "",
+    "geral": ""
+  }
 }

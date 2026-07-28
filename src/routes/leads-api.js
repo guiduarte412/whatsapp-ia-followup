@@ -1,8 +1,8 @@
 const express = require('express');
-const { getAllLeads, getLead, iniciarSequencia } = require('../db/store');
+const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead } = require('../db/store');
 
 const router = express.Router();
-router.use(express.json());
+router.use(express.json({ limit: '2mb' }));
 
 const PRODUTOS_VALIDOS = ['agro', 'imoveis', 'caminhoes', 'credito_empresarial'];
 
@@ -37,6 +37,22 @@ router.post('/leads', (req, res) => {
 
   const lead = iniciarSequencia(telefone, { nome, produto });
   res.status(201).json(lead);
+});
+
+// Importacao em lote (usado pelo importador de Excel no site - o arquivo e
+// lido no navegador, aqui so recebe a lista ja em JSON).
+router.post('/leads/lote', (req, res) => {
+  const linhas = req.body?.leads;
+  if (!Array.isArray(linhas) || !linhas.length) {
+    return res.status(400).json({ erro: 'nenhuma linha recebida' });
+  }
+  const resultado = iniciarSequenciaEmLote(linhas);
+  res.status(201).json(resultado);
+});
+
+router.delete('/leads/:telefone', (req, res) => {
+  removerLead(req.params.telefone);
+  res.status(204).end();
 });
 
 module.exports = router;

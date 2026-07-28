@@ -7,16 +7,22 @@
 <link rel="stylesheet" href="/estilo.css">
 </head>
 <body>
-<div class="container">
-  <a class="voltar" href="/index.html">← Voltar</a>
-  <header class="topo">
+<header class="hero">
+  <div class="conteudo">
     <div>
+      <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
       <p class="marca">Fourcon | FourAgro</p>
       <h1 id="nome">—</h1>
     </div>
-  </header>
+    <div class="acoes">
+      <a class="botao secundario" href="/index.html">Voltar</a>
+      <button class="botao secundario" id="btn-remover" style="border-color: rgba(184,80,58,0.6); color: #ffb3a0;">Remover lead</button>
+    </div>
+  </div>
+</header>
 
-  <div id="resumo"></div>
+<div class="container">
+  <div id="resumo" style="margin-top: 20px;"></div>
   <div class="conversa" id="conversa"></div>
 </div>
 
@@ -59,7 +65,7 @@ async function carregar() {
   document.getElementById('resumo').innerHTML = `
     <span class="status ${lead.status}"><span class="ponto"></span>${LABELS_STATUS[lead.status] || lead.status}</span>
     &nbsp;·&nbsp; ${LABELS_PRODUTO[lead.produto] || lead.produto || '—'}
-    &nbsp;·&nbsp; <span class="telefone" style="font-family: var(--font-mono); font-size: 13px;">${lead.phone}</span>
+    &nbsp;·&nbsp; <span style="font-family: var(--font-mono); font-size: 13px;">${lead.phone}</span>
   `;
 
   const conversaDiv = document.getElementById('conversa');
@@ -80,6 +86,16 @@ async function carregar() {
 }
 
 carregar();
+
+document.getElementById('btn-remover').addEventListener('click', async () => {
+  const params = new URLSearchParams(window.location.search);
+  const telefone = params.get('telefone');
+  if (!telefone) return;
+  if (!confirm('Remover este lead? Isso apaga a conversa e não pode ser desfeito.')) return;
+
+  await fetch(`/api/leads/${encodeURIComponent(telefone)}`, { method: 'DELETE' });
+  window.location.href = '/index.html';
+});
 </script>
 </body>
 </html>
