@@ -1,5 +1,5 @@
 const express = require('express');
-const { getLeadFlexivel, upsertLead, appendConversa, appendExample } = require('../db/store');
+const { getLeadFlexivel, upsertLead, appendConversa, appendExample, getPausado } = require('../db/store');
 const { avisarConsultor, enviarMensagem, formatarAvisoLead } = require('../services/whatsapp');
 const { responderConversa } = require('../services/claude');
 const { extrairTexto } = require('../services/media');
@@ -40,6 +40,18 @@ router.post('/whatsapp', express.json(), async (req, res) => {
   }
 
   const telefoneLead = lead.phone;
+
+  // Botao de emergencia ligado: registra a mensagem do lead pra nao perder
+  // nada, mas nao deixa a IA responder. Voce assume manualmente enquanto
+  // estiver pausado.
+  if (getPausado()) {
+    const textoSimplesPausa = payload?.text?.message || payload?.message || '[mensagem recebida]';
+    if (payload?.fromMe !== true) {
+      appendConversa(telefoneLead, { de: 'lead', texto: textoSimplesPausa });
+      console.log(`Sistema pausado - mensagem do lead ${telefoneLead} registrada sem resposta automatica.`);
+    }
+    return res.status(200).json({ ok: true, pausado: true });
+  }
 
   // "fromMe: true" quer dizer que a mensagem saiu do proprio numero
   // conectado - tanto faz se foi a IA respondendo automaticamente quanto

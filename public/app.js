@@ -13,25 +13,47 @@ const LABELS_PRODUTO = {
   credito_empresarial: 'Crédito empresarial',
 };
 
+// ===== Chamadas autenticadas =====
+// Todas as rotas de dados exigem o token de sessão que o servidor entrega
+// quando o código de acesso é digitado certo. Se a sessão expirar (12h),
+// volta pra tela de código automaticamente.
+async function api(url, opcoes = {}) {
+  const token = sessionStorage.getItem('sessaoToken');
+  const resposta = await fetch(url, {
+    ...opcoes,
+    headers: { ...(opcoes.headers || {}), 'x-sessao': token || '' },
+  });
+  if (resposta.status === 401) {
+    sessionStorage.removeItem('sessaoToken');
+    location.reload();
+    throw new Error('sessão expirada');
+  }
+  return resposta;
+}
+
 // ===== Gate de acesso =====
 const gateEl = document.getElementById('gate');
 const appEl = document.getElementById('app');
 
 async function tentarEntrar() {
   const codigo = document.getElementById('codigo-acesso').value.trim();
+  const erroEl = document.getElementById('erro-gate');
   const resp = await fetch('/api/acesso/verificar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ codigo }),
   });
   const corpo = await resp.json();
+
   if (corpo.valido) {
-    sessionStorage.setItem('acessoLiberado', 'sim');
+    sessionStorage.setItem('sessaoToken', corpo.sessao);
+    erroEl.style.display = 'none';
     gateEl.style.display = 'none';
     appEl.style.display = 'block';
     rotear();
   } else {
-    document.getElementById('erro-gate').style.display = 'block';
+    erroEl.textContent = corpo.erro || 'Código incorreto.';
+    erroEl.style.display = 'block';
   }
 }
 
@@ -40,7 +62,7 @@ document.getElementById('codigo-acesso').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') tentarEntrar();
 });
 
-if (sessionStorage.getItem('acessoLiberado') === 'sim') {
+if (sessionStorage.getItem('sessaoToken')) {
   gateEl.style.display = 'none';
   appEl.style.display = 'block';
 }
@@ -60,12 +82,13 @@ function rotear() {
   if (view === 'lead' && param) {
     mostrarView('lead');
     carregarDetalheLead(param);
-  } else if (['novo', 'testar', 'codigo', 'crm', 'relatorio', 'agenda', 'metricas'].includes(view)) {
+  } else if (['novo', 'testar', 'codigo', 'crm', 'relatorio', 'agenda', 'metricas', 'tom', 'backup'].includes(view)) {
     mostrarView(view);
     if (view === 'crm') carregarCrm();
     if (view === 'relatorio') prepararRelatorio();
     if (view === 'agenda') carregarAgenda();
     if (view === 'metricas') carregarMetricas();
+    if (view === 'tom') carregarExemplosTom();
   } else {
     mostrarView('leads');
     carregarLeads();
@@ -114,9 +137,10 @@ let todosOsLeads = [];
 async function carregarLeads() {
   const quadro = document.getElementById('quadro');
   try {
-    const resp = await fetch('/api/leads');
+    const resp = await api('/api/leads');
     todosOsLeads = await resp.json();
     renderizarQuadro();
+    atualizarEstadoPausa();
   } catch (erro) {
     quadro.innerHTML = '<div class="vazio">Não consegui carregar os leads agora.</div>';
   }
@@ -124,8 +148,13 @@ async function carregarLeads() {
 
 function renderizarQuadro() {
   const quadro = document.getElementById('quadro');
-  const termoBusca = (document.getElementById('busca-telefone').value || '').replace(/\D/g, '');
-  const leads = termoBusca ? todosOsLeads.filter((l) => l.phone.includes(termoBusca)) : todosOsLeads;
+  const termoCru = (document.getElementById('busca-telefone').value || '').trim().toLowerCase();
+  const termoDigitos = termoCru.replace(/\D/g, '');
+  const leads = termoCru
+    ? todosOsLeads.filter((l) =>
+        (termoDigitos && l.phone.includes(termoDigitos)) ||
+        (l.nome || '').toLowerCase().includes(termoCru))
+    : todosOsLeads;
 
   if (!todosOsLeads.length) {
     quadro.innerHTML = '<div class="vazio">Nenhum lead ainda. Adicione o primeiro depois de uma ligação sem retorno.</div>';
@@ -157,8 +186,38 @@ function renderizarQuadro() {
 
 document.getElementById('busca-telefone').addEventListener('input', renderizarQuadro);
 
+// O quadro se atualiza sozinho a cada 30s enquanto estiver aberto, pra
+// refletir mensagens que sairam ou leads que responderam nesse meio tempo.
+setInterval(() => {
+  if (document.getElementById('view-leads').style.display !== 'none') carregarLeads();
+}, 30000);
+
+// ===== Botao de emergencia (pausar todos os envios) =====
+
+async function atualizarEstadoPausa() {
+  try {
+    const resp = await api('/api/pausa');
+    const { pausado } = await resp.json();
+    document.getElementById('aviso-pausado').style.display = pausado ? 'block' : 'none';
+    document.getElementById('btn-pausa').textContent = pausado ? 'Retomar envios' : 'Pausar envios';
+  } catch (erro) { /* silencioso - nao vale travar o painel por isso */ }
+}
+
+document.getElementById('btn-pausa').addEventListener('click', async () => {
+  const resp = await api('/api/pausa');
+  const { pausado } = await resp.json();
+  const novo = !pausado;
+  if (novo && !confirm('Pausar TODOS os envios automáticos? Nenhum lead vai receber mensagem até você retomar.')) return;
+  await api('/api/pausa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pausado: novo }),
+  });
+  atualizarEstadoPausa();
+});
+
 document.getElementById('btn-exportar').addEventListener('click', async () => {
-  const resp = await fetch('/api/leads');
+  const resp = await api('/api/leads');
   const leads = await resp.json();
   const linhas = leads.map((l) => ({
     Nome: l.nome || '',
@@ -188,7 +247,7 @@ inputArquivo.addEventListener('change', async (evento) => {
     telefone: linha.Telefone || linha.telefone || linha.WhatsApp || '',
     produto: (linha.Produto || linha.produto || 'geral').toString().toLowerCase(),
   }));
-  const resp = await fetch('/api/leads/lote', {
+  const resp = await api('/api/leads/lote', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ leads: leadsParaImportar }),
@@ -196,9 +255,10 @@ inputArquivo.addEventListener('change', async (evento) => {
   const resultado = await resp.json();
   const msg = document.getElementById('msg-importacao');
   msg.style.display = 'block';
-  msg.textContent = resultado.erros?.length
-    ? `${resultado.criados} lead(s) importado(s). ${resultado.erros.length} linha(s) com erro (confira nome/telefone).`
-    : `${resultado.criados} lead(s) importado(s) com sucesso.`;
+  const partes = [`${resultado.criados} lead(s) importado(s)`];
+  if (resultado.duplicados) partes.push(`${resultado.duplicados} já existia(m) e foi(ram) mantido(s) sem alteração`);
+  if (resultado.erros?.length) partes.push(`${resultado.erros.length} linha(s) com erro (confira nome/telefone)`);
+  msg.textContent = partes.join(' · ') + '.';
   inputArquivo.value = '';
   carregarLeads();
 });
@@ -217,7 +277,7 @@ document.getElementById('form-novo').addEventListener('submit', async (evento) =
   };
 
   try {
-    const resp = await fetch('/api/leads', {
+    const resp = await api('/api/leads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dados),
@@ -268,7 +328,7 @@ document.getElementById('form-teste').addEventListener('submit', async (evento) 
   };
 
   try {
-    const resp = await fetch('/api/testar-mensagem', {
+    const resp = await api('/api/testar-mensagem', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dados),
@@ -311,7 +371,7 @@ document.getElementById('form-whatsapp').addEventListener('submit', async (event
   };
 
   try {
-    const resp = await fetch('/api/testar-whatsapp', {
+    const resp = await api('/api/testar-whatsapp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dados),
@@ -369,7 +429,7 @@ document.getElementById('btn-iniciar-simulacao').addEventListener('click', async
   btnIniciar.disabled = true;
 
   try {
-    const resp = await fetch('/api/simular/iniciar', {
+    const resp = await api('/api/simular/iniciar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome: simNome, produto: simProduto }),
@@ -400,7 +460,7 @@ async function simEnviarComoLead() {
   btnEnviarComoLead.disabled = true;
 
   try {
-    const resp = await fetch('/api/simular/responder', {
+    const resp = await api('/api/simular/responder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome: simNome, produto: simProduto, historico: simHistorico }),
@@ -431,7 +491,7 @@ function formatarHora(iso) {
 }
 
 async function carregarDetalheLead(telefone) {
-  const resp = await fetch(`/api/leads/${encodeURIComponent(telefone)}`);
+  const resp = await api(`/api/leads/${encodeURIComponent(telefone)}`);
   if (!resp.ok) {
     document.getElementById('lead-resumo').textContent = 'Lead não encontrado.';
     return;
@@ -462,13 +522,13 @@ async function carregarDetalheLead(telefone) {
   botaoAssumir.style.display = lead.status === 'encerrado' ? 'none' : 'inline-flex';
   botaoAssumir.onclick = async () => {
     if (!confirm('Encerrar o atendimento automático desse lead? A IA para de responder por aqui.')) return;
-    await fetch(`/api/leads/${encodeURIComponent(telefone)}/encerrar`, { method: 'POST' });
+    await api(`/api/leads/${encodeURIComponent(telefone)}/encerrar`, { method: 'POST' });
     carregarDetalheLead(telefone);
   };
 
   document.getElementById('btn-remover-lead').onclick = async () => {
     if (!confirm('Remover este lead? Isso apaga a conversa e não pode ser desfeito.')) return;
-    await fetch(`/api/leads/${encodeURIComponent(telefone)}`, { method: 'DELETE' });
+    await api(`/api/leads/${encodeURIComponent(telefone)}`, { method: 'DELETE' });
     location.hash = '#leads';
   };
 }
@@ -507,7 +567,7 @@ document.getElementById('form-codigo').addEventListener('submit', async (evento)
 // ===== VIEW: integração com o CRM =====
 
 async function carregarCrm() {
-  const resp = await fetch('/api/crm');
+  const resp = await api('/api/crm');
   const dados = await resp.json();
   document.getElementById('crm-url').value = dados.urlBase || '';
   document.getElementById('crm-status').textContent = dados.apiKeyDefinida
@@ -522,7 +582,7 @@ document.getElementById('form-crm').addEventListener('submit', async (evento) =>
     urlBase: document.getElementById('crm-url').value.trim(),
     apiKey: document.getElementById('crm-chave').value.trim(),
   };
-  await fetch('/api/crm', {
+  await api('/api/crm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(dados),
@@ -552,7 +612,7 @@ async function gerarRelatorio() {
   const listaEl = document.getElementById('relatorio-lista');
   if (!dataAlvo) return;
 
-  const resp = await fetch('/api/leads');
+  const resp = await api('/api/leads');
   const leads = await resp.json();
   relatorioAtual = [];
 
@@ -619,14 +679,14 @@ document.getElementById('btn-exportar-relatorio').addEventListener('click', asyn
 // ===== VIEW: Google Agenda =====
 
 async function carregarAgenda() {
-  const resp = await fetch('/api/google-agenda');
+  const resp = await api('/api/google-agenda');
   const config = await resp.json();
   document.getElementById('agenda-querconectar').checked = Boolean(config.querConectar);
 }
 
 document.getElementById('btn-salvar-agenda').addEventListener('click', async () => {
   const querConectar = document.getElementById('agenda-querconectar').checked;
-  await fetch('/api/google-agenda', {
+  await api('/api/google-agenda', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ querConectar }),
@@ -649,7 +709,7 @@ function cartaoMetrica(valor, rotulo) {
 }
 
 async function carregarMetricas() {
-  const resp = await fetch('/api/leads');
+  const resp = await api('/api/leads');
   const leads = await resp.json();
   const container = document.getElementById('metricas-cartoes');
 
@@ -677,3 +737,87 @@ async function carregarMetricas() {
     cartaoMetrica(semResposta, 'Sem resposta (6 tentativas)'),
   ].join('');
 }
+
+// ===== VIEW: estilo das mensagens (exemplos de tom) =====
+
+function renderizarExemplosTom(exemplos) {
+  const lista = document.getElementById('tom-lista');
+  lista.innerHTML = exemplos.map((texto, i) => `
+    <div class="campo">
+      <label>Exemplo ${i + 1}</label>
+      <textarea class="exemplo-tom" rows="4">${texto.replace(/</g, '&lt;')}</textarea>
+    </div>
+  `).join('');
+}
+
+async function carregarExemplosTom() {
+  const resp = await api('/api/exemplos-tom');
+  const dados = await resp.json();
+  renderizarExemplosTom(dados.exemplos);
+}
+
+document.getElementById('btn-add-exemplo').addEventListener('click', () => {
+  const atuais = [...document.querySelectorAll('.exemplo-tom')].map((t) => t.value);
+  renderizarExemplosTom([...atuais, '']);
+});
+
+document.getElementById('btn-salvar-tom').addEventListener('click', async () => {
+  const exemplos = [...document.querySelectorAll('.exemplo-tom')].map((t) => t.value).filter((t) => t.trim());
+  const resp = await api('/api/exemplos-tom', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ exemplos }),
+  });
+  const dados = await resp.json();
+  renderizarExemplosTom(dados.exemplos);
+  const sucesso = document.getElementById('tom-sucesso');
+  sucesso.textContent = `Salvo — ${dados.exemplos.length} exemplo(s) em uso.`;
+  sucesso.style.display = 'block';
+  setTimeout(() => { sucesso.style.display = 'none'; }, 3000);
+});
+
+// ===== VIEW: backup =====
+
+document.getElementById('btn-baixar-backup').addEventListener('click', async () => {
+  const resp = await api('/api/backup');
+  const texto = await resp.text();
+  const blob = new Blob([texto], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `backup-fouragro-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+
+const arquivoBackup = document.getElementById('arquivo-backup');
+document.getElementById('btn-restaurar-backup').addEventListener('click', () => {
+  if (!confirm('Restaurar de um backup SUBSTITUI todos os dados atuais (leads, conversas, configurações). Isso não pode ser desfeito. Continuar?')) return;
+  arquivoBackup.click();
+});
+
+arquivoBackup.addEventListener('change', async (evento) => {
+  const arquivo = evento.target.files[0];
+  if (!arquivo) return;
+  const sucessoEl = document.getElementById('backup-sucesso');
+  const erroEl = document.getElementById('backup-erro');
+  sucessoEl.style.display = 'none';
+  erroEl.style.display = 'none';
+
+  try {
+    const dados = JSON.parse(await arquivo.text());
+    const resp = await api('/api/backup/restaurar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dados }),
+    });
+    const corpo = await resp.json();
+    if (!resp.ok) throw new Error(corpo.erro || 'falha ao restaurar');
+    sucessoEl.textContent = `Restaurado — ${corpo.leads} lead(s) no sistema.`;
+    sucessoEl.style.display = 'block';
+  } catch (erro) {
+    erroEl.textContent = `Não consegui restaurar: ${erro.message}`;
+    erroEl.style.display = 'block';
+  } finally {
+    arquivoBackup.value = '';
+  }
+});

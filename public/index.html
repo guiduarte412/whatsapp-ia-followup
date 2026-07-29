@@ -28,6 +28,8 @@
         <a class="botao secundario" href="#relatorio">Relatório diário</a>
         <a class="botao secundario" href="#crm">CRM</a>
         <a class="botao secundario" href="#agenda">Google Agenda</a>
+        <a class="botao secundario" href="#tom">Estilo das mensagens</a>
+        <a class="botao secundario" href="#backup">Backup</a>
         <a class="botao secundario" href="#codigo">Código de acesso</a>
         <a class="botao" href="#novo">+ Novo lead</a>
       </div>
@@ -42,10 +44,14 @@
 
     <!-- VIEW: quadro de leads -->
     <section id="view-leads" class="view">
+      <div id="aviso-pausado" style="display:none; background: rgba(232,92,74,0.2); border: 1px solid var(--alerta); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px;">
+        <strong>Sistema pausado.</strong> Nenhuma mensagem automática está sendo enviada.
+      </div>
       <div class="barra-ferramentas">
-        <input type="text" id="busca-telefone" placeholder="Buscar por número de telefone..." style="max-width: 280px;">
+        <input type="text" id="busca-telefone" placeholder="Buscar por número ou nome..." style="max-width: 280px;">
         <button class="botao claro" id="btn-exportar">Exportar Excel</button>
         <button class="botao claro" id="btn-importar">Importar Excel</button>
+        <button class="botao secundario" id="btn-pausa">Pausar envios</button>
         <input type="file" id="arquivo-importar" accept=".xlsx,.xls" style="display:none">
       </div>
       <div class="sucesso" id="msg-importacao"></div>
@@ -305,6 +311,46 @@
           Quero conectar meu Google Agenda automaticamente no futuro
         </label>
         <button class="botao claro" id="btn-salvar-agenda" style="margin-top:20px;">Salvar</button>
+      </div>
+    </section>
+
+    <!-- VIEW: estilo das mensagens (exemplos de tom) -->
+    <section id="view-tom" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <div class="cartao largo">
+        <h2 style="margin-top:0;">Estilo das mensagens</h2>
+        <p class="dica" style="margin-top:0;">
+          Cole aqui mensagens reais que você já mandou pra leads — uma por
+          caixa. Quanto mais exemplos, mais a IA escreve parecido com você.
+          Não precisa ser perfeito nem recente, só precisa ser seu jeito
+          natural de escrever.
+        </p>
+        <div class="sucesso" id="tom-sucesso"></div>
+        <div id="tom-lista"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
+          <button class="botao secundario" id="btn-add-exemplo">+ Adicionar exemplo</button>
+          <button class="botao claro" id="btn-salvar-tom">Salvar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW: backup -->
+    <section id="view-backup" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar</a>
+      <div class="cartao largo">
+        <h2 style="margin-top:0;">Backup dos dados</h2>
+        <p class="dica" style="margin-top:0;">
+          Baixa tudo (leads, conversas, configurações) num arquivo. Se o
+          servidor perder os dados, esse arquivo devolve o sistema ao estado
+          exato de quando foi baixado. Vale baixar uma vez por semana.
+        </p>
+        <div class="sucesso" id="backup-sucesso"></div>
+        <div class="erro" id="backup-erro"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="botao claro" id="btn-baixar-backup">Baixar backup</button>
+          <button class="botao secundario" id="btn-restaurar-backup">Restaurar de um arquivo</button>
+          <input type="file" id="arquivo-backup" accept=".json" style="display:none">
+        </div>
       </div>
     </section>
 

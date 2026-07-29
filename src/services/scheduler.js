@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { getActiveSequenceLeads, upsertLead, appendExample, appendConversa } = require('../db/store');
+const { getActiveSequenceLeads, upsertLead, appendExample, appendConversa, getPausado } = require('../db/store');
 const { gerarMensagem } = require('./claude');
 const { enviarMensagem, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
 
@@ -113,6 +113,7 @@ async function processarLead(lead) {
 function iniciar() {
   // roda a cada 15 minutos e verifica quem precisa receber a proxima mensagem
   cron.schedule('*/15 * * * *', async () => {
+    if (getPausado()) return; // botao de emergencia ligado - nao envia nada
     if (!dentroDoHorarioPermitido()) return;
 
     const leads = getActiveSequenceLeads();

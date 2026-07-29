@@ -91,7 +91,15 @@ function getAllLeads() {
 // dois caem na mesma logica, pra nunca ficar desalinhado.
 // "teste: true" marca o lead como um teste (aparece com selo TESTE no
 // painel, pra nao confundir com lead real).
+//
+// IMPORTANTE: se o lead JA existe, nao reinicia nada. Sem isso, reimportar
+// a mesma planilha (ou o RD Station reenviar o mesmo lead) apagaria a
+// conversa inteira e comecaria a mandar mensagem de novo pra quem ja
+// estava sendo atendido.
 function iniciarSequencia(phone, { nome, produto, teste }) {
+  const existente = getLeadFlexivel(phone);
+  if (existente) return { ...existente, jaExistia: true };
+
   const agora = new Date();
   // 1a mensagem: 30 a 60 min depois do lead entrar (sorteado, nunca fixo).
   const primeiroEnvioEm = new Date(agora.getTime() + (30 + Math.random() * 30) * 60_000).toISOString();
@@ -119,7 +127,7 @@ function removerLead(phone) {
 // Cria varios leads de uma vez (usado na importacao de Excel). Retorna
 // quantos entraram certo e quais linhas deram erro, pra mostrar no site.
 function iniciarSequenciaEmLote(linhas) {
-  const resultado = { criados: 0, erros: [] };
+  const resultado = { criados: 0, duplicados: 0, erros: [] };
   linhas.forEach((linha, indice) => {
     const telefone = (linha.telefone || '').toString().replace(/\D/g, '');
     if (!telefone || telefone.length < 12) {
@@ -130,8 +138,9 @@ function iniciarSequenciaEmLote(linhas) {
       resultado.erros.push({ linha: indice + 1, motivo: 'nome vazio' });
       return;
     }
-    iniciarSequencia(telefone, { nome: linha.nome, produto: linha.produto || 'geral' });
-    resultado.criados += 1;
+    const lead = iniciarSequencia(telefone, { nome: linha.nome, produto: linha.produto || 'agro' });
+    if (lead.jaExistia) resultado.duplicados += 1;
+    else resultado.criados += 1;
   });
   return resultado;
 }
@@ -220,6 +229,60 @@ function alterarCodigoAcesso(palavraChave, novoCodigo) {
   return true;
 }
 
+// --- Pausa geral do sistema ---
+// Botao de emergencia: para TODOS os envios automaticos na hora, sem
+// precisar mexer no Railway nem derrubar o servidor. Os leads e conversas
+// ficam intactos - so nao sai nem entra mensagem automatica enquanto
+// estiver pausado.
+
+function getPausado() {
+  return Boolean(load().pausado);
+}
+
+function setPausado(pausado) {
+  const db = load();
+  db.pausado = Boolean(pausado);
+  save(db);
+  return db.pausado;
+}
+
+// --- Exemplos de tom (mensagens reais do consultor) ---
+// Quanto mais exemplos reais aqui, mais a IA escreve parecido com ele.
+// Comeca com o exemplo real que ele mandou, editavel pelo site depois.
+
+const EXEMPLOS_TOM_PADRAO = [
+  `Boa tarde, tudo bem?
+Aqui é o Guilherme, da Fourcon | FourAgro.
+Recebi sua solicitação de crédito rural e vou acompanhar seu atendimento.
+Podemos fazer uma ligação de 10 minutos para entender sua necessidade e encontrar a melhor solução? Se preferir, me informe o melhor horário que eu ligo.`,
+];
+
+function getExemplosDeTom() {
+  const db = load();
+  return db.exemplosDeTom || EXEMPLOS_TOM_PADRAO;
+}
+
+function salvarExemplosDeTom(exemplos) {
+  const db = load();
+  db.exemplosDeTom = exemplos.filter((e) => e && e.trim()).slice(0, 8);
+  save(db);
+  return db.exemplosDeTom;
+}
+
+// --- Backup completo ---
+// Exporta/importa o banco inteiro. O Volume do Railway ja protege contra
+// perda em deploy, mas nao contra o Volume em si se perder - por isso vale
+// baixar um backup de vez em quando.
+
+function exportarTudo() {
+  return load();
+}
+
+function importarTudo(dados) {
+  save(dados);
+  return dados;
+}
+
 module.exports = {
   getLead,
   getLeadFlexivel,
@@ -230,6 +293,12 @@ module.exports = {
   iniciarSequenciaEmLote,
   removerLead,
   getCrmConfig,
+  getPausado,
+  setPausado,
+  getExemplosDeTom,
+  salvarExemplosDeTom,
+  exportarTudo,
+  importarTudo,
   salvarCrmConfig,
   getGoogleAgendaConfig,
   salvarGoogleAgendaConfig,

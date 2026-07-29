@@ -7,16 +7,27 @@ const leadsApi = require('./routes/leads-api');
 const testeApi = require('./routes/teste-api');
 const acessoApi = require('./routes/acesso-api');
 const crmApi = require('./routes/crm-api');
+const backupApi = require('./routes/backup-api');
+const { exigirSessao } = require('./services/sessao');
 const scheduler = require('./services/scheduler');
 
 const app = express();
+app.set('trust proxy', true); // Railway roda atras de proxy - sem isso o IP real nao chega
 
+// Webhooks vem de fora (Z-API, RD Station) e nao tem como mandar token -
+// ficam fora da protecao de sessao, de proposito.
 app.use('/webhooks', rdstationWebhook);
 app.use('/webhooks', whatsappWebhook);
-app.use('/api', leadsApi);
-app.use('/api', testeApi);
+
+// Rota de acesso e publica (e ela quem valida o codigo e cria a sessao).
 app.use('/api', acessoApi);
-app.use('/api', crmApi);
+
+// Todo o resto exige uma sessao valida - sem isso, qualquer um com a URL
+// do site conseguiria baixar a lista de leads sem digitar codigo nenhum.
+app.use('/api', exigirSessao, leadsApi);
+app.use('/api', exigirSessao, testeApi);
+app.use('/api', exigirSessao, crmApi);
+app.use('/api', exigirSessao, backupApi);
 
 // Site simples pra adicionar leads manualmente e ver o andamento -
 // arquivos em /public, sem build step, só HTML/CSS/JS puro.

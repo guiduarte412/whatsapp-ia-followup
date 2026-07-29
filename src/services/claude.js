@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { getRecentSuccessfulExamples } = require('../db/store');
+const { getRecentSuccessfulExamples, getExemplosDeTom } = require('../db/store');
 
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const CONSULTOR_NOME = process.env.CONSULTOR_NOME || 'Guilherme';
@@ -14,48 +14,50 @@ function textoDosTopicos() {
   return `Como mencionar o produto (bem por cima, so pra situar o lead - os detalhes ficam pra ligacao):\n${TOPICO_PADRAO}`;
 }
 
-// Exemplo real de mensagem que o consultor ja mandou - usado como referencia
-// de tom pra IA escrever parecido, nao generico/robotico.
-const EXEMPLO_REAL_DE_TOM = `"Boa tarde, tudo bem?
-Aqui é o ${CONSULTOR_NOME}, da ${CONSULTOR_EMPRESA}.
-Recebi sua solicitação de crédito rural e vou acompanhar seu atendimento.
-Podemos fazer uma ligação de 10 minutos para entender sua necessidade e encontrar a melhor solução? Se preferir, me informe o melhor horário que eu ligo."`;
-
 // IDENTIDADE: a IA NUNCA e uma assistente ou uma "IA de atendimento" falando
 // EM NOME de alguem - ela escreve como se FOSSE literalmente o consultor,
 // sempre primeira pessoa ("eu"), nunca menciona "o consultor" como se fosse
 // uma terceira pessoa (nem mesmo quando vai encaminhar algo pra ele).
-const IDENTIDADE = `Você é ${CONSULTOR_NOME}, consultor financeiro brasileiro especializado em consórcio
-(segmentos: agro/rural, imóveis, caminhões/veículos pesados e crédito empresarial) da ${CONSULTOR_EMPRESA}.
+const IDENTIDADE = `Você é ${CONSULTOR_NOME}, consultor financeiro brasileiro especializado em
+consórcio de crédito rural/agro, da ${CONSULTOR_EMPRESA}.
 Você está respondendo mensagens de WhatsApp pessoalmente, em primeira pessoa - "eu", nunca "o
 consultor" ou "nosso consultor" como se fosse outra pessoa. Você NÃO é uma assistente, secretária ou
 IA de atendimento representando alguém: você ESCREVE COMO SE FOSSE ${CONSULTOR_NOME} mesmo, sempre.
 
 Tom: formal e profissional, mais formal que informal - trate o lead com cordialidade e respeito,
 evite gírias, diminutivos ("minutinho", "rapidinho") e informalidade excessiva. Frases completas,
-bem escritas, sem soar frio ou robótico.`;
+bem escritas, sem soar frio ou robótico.
 
-// O objetivo de TODA mensagem por WhatsApp e conseguir marcar uma ligacao ou
-// reuniao/chamada de video - os detalhes do consorcio (valores, prazos,
-// condicoes) so sao explicados ao vivo, nunca por texto. Isso vale tanto pra
-// sequencia inicial (gerarMensagem) quanto pra conversa continuada
-// (responderConversa).
-const OBJETIVO_BASE = `${IDENTIDADE}
+Tamanho: mensagens de WhatsApp são curtas. Nunca escreva blocos longos. Varie o tamanho entre uma
+mensagem e outra (uma mais curta, a próxima um pouco mais longa) - gente de verdade não manda
+sempre mensagens do mesmo tamanho.`;
+
+// Monta o bloco de instrucao base. E funcao (nao constante) porque os
+// exemplos de tom agora sao editaveis pelo site - precisam ser lidos a
+// cada geracao, nao uma vez so quando o servidor sobe.
+function objetivoBase() {
+  const exemplos = getExemplosDeTom();
+  const blocoExemplos = exemplos.length
+    ? exemplos.map((e, i) => `Exemplo ${i + 1}:\n"${e}"`).join('\n\n')
+    : 'Nenhum exemplo cadastrado ainda.';
+
+  return `${IDENTIDADE}
 
 O objetivo de toda mensagem e conseguir marcar uma ligação ou reunião/chamada de vídeo com o lead -
 NUNCA explicar o consórcio em detalhe por texto. Mencione o produto de forma bem básica (ex: "sobre
-o consórcio de imóveis que você se interessou") e direcione para uma conversa por voz/vídeo, onde
+o crédito rural que você se interessou") e direcione para uma conversa por voz/vídeo, onde
 você explica tudo. Se o lead pedir detalhes de valor, prazo ou condição, a resposta certa é oferecer
 explicar isso numa ligação - não tentar explicar por mensagem.
 
-Escreva no seu próprio estilo. Exemplo real de uma mensagem sua (use como referência de tom,
+Escreva no seu próprio estilo. Exemplos reais de mensagens suas (use como referência de tom,
 formalidade e estrutura - não copie literalmente, cada mensagem é de um lead/situação diferente):
-${EXEMPLO_REAL_DE_TOM}
+${blocoExemplos}
 
 Regra crítica sobre contemplação: NUNCA prometa, insinue ou dê a entender que a contemplação
 (sorteio ou lance) está garantida, tem um prazo certo, ou é "rápida"/"fácil". Contemplação em
 consórcio é sempre incerta - depende de sorteio ou lance. Isso vale mesmo se o lead perguntar
 diretamente ou insistir.`;
+}
 
 // Numero da tentativa (1 a 6) define o tom da mensagem.
 // Isso implementa a cadencia: 2 mensagens/dia por 3 dias.
@@ -74,7 +76,13 @@ necessidade, e ofereça flexibilidade de horário.`,
 // Chamada compartilhada pra API da Claude. Se falhar, o erro devolvido
 // inclui o motivo real que a Anthropic mandou (chave invalida, modelo
 // errado, etc), nao so o codigo de status generico do axios.
-async function chamarClaude(systemPrompt, userPrompt, maxTokens) {
+//
+// Tenta ate 3 vezes em falhas temporarias (instabilidade de rede, limite
+// de requisicoes, erro 500 da API). Erros definitivos - chave invalida,
+// sem credito, modelo errado - falham de primeira, porque tentar de novo
+// nao ia adiantar.
+async function chamarClaude(systemPrompt, userPrompt, maxTokens, tentativa = 1) {
+  const MAX_TENTATIVAS = 3;
   try {
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
@@ -90,6 +98,7 @@ async function chamarClaude(systemPrompt, userPrompt, maxTokens) {
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         },
+        timeout: 30_000,
       }
     );
     return response.data.content
@@ -98,6 +107,16 @@ async function chamarClaude(systemPrompt, userPrompt, maxTokens) {
       .join('\n')
       .trim();
   } catch (erro) {
+    const status = erro.response?.status;
+    const vaiAdiantarTentarDeNovo = !status || status === 429 || status >= 500;
+
+    if (vaiAdiantarTentarDeNovo && tentativa < MAX_TENTATIVAS) {
+      const esperaMs = tentativa * 2000; // 2s, depois 4s
+      console.warn(`Claude API falhou (tentativa ${tentativa}/${MAX_TENTATIVAS}), tentando de novo em ${esperaMs / 1000}s...`);
+      await new Promise((r) => setTimeout(r, esperaMs));
+      return chamarClaude(systemPrompt, userPrompt, maxTokens, tentativa + 1);
+    }
+
     const detalhe = erro.response?.data?.error?.message || erro.response?.data || erro.message;
     throw new Error(`Claude API: ${JSON.stringify(detalhe)}`);
   }
@@ -162,13 +181,15 @@ async function gerarMensagem({ leadNome, produto, tentativa, historico }) {
 
   const topicosTexto = textoDosTopicos();
 
-  const systemPrompt = `${OBJETIVO_BASE}
+  const systemPrompt = `${objetivoBase()}
 
 Contexto: você acabou de ligar para esse lead e não conseguiu atendimento. Escreva UMA mensagem
 curta, humana e natural (nunca robótica, nunca com cara de disparo em massa).
 
 Regras:
-- Máximo 3-4 linhas.
+- Máximo 3 linhas curtas. Alterne o tamanho: se a mensagem anterior desta sequência foi mais
+  longa, essa deve ser bem curta (1-2 linhas), e vice-versa. Só a 1ª mensagem (a de apresentação)
+  pode ser um pouco mais longa.
 - Nunca usar linguagem de spam ("promoção imperdível", excesso de emoji, tudo em maiúsculas).
 - Termine perguntando um horário pra ligar ou conversar - esse é sempre o próximo passo.
 - Varie a abordagem de acordo com o número da tentativa (instrução abaixo).
@@ -202,7 +223,7 @@ Historico de mensagens ja enviadas nesta sequencia: ${historico?.length ? histor
 async function responderConversa({ leadNome, produto, historicoConversa }) {
   const topicosTexto = textoDosTopicos();
 
-  const systemPrompt = `${OBJETIVO_BASE}
+  const systemPrompt = `${objetivoBase()}
 
 Você está conversando por WhatsApp com um lead que respondeu ao seu contato.
 
@@ -235,7 +256,8 @@ Regras rígidas, sem exceção:
   resposta) - só não avance a negociação nem confirme algo que exige uma ligação pra ser resolvido
   de verdade.
 - Fora dessas situações, converse normalmente: tire dúvidas bem gerais, mantenha o interesse,
-  mensagens curtas (2-3 linhas), sempre puxando para marcar a ligação/reunião.
+  mensagens curtas (1-3 linhas, alternando entre mais curta e um pouco mais longa a cada troca),
+  sempre puxando para marcar a ligação/reunião.
 
 Responda SOMENTE com um JSON válido, neste formato exato, sem nenhum texto antes ou depois:
 {"resposta": "texto da mensagem para o lead (sempre preenchido)", "encaminhar_humano": true ou false, "horario_confirmado": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto (ex: horário confirmado, dúvida pendente), se encaminhar_humano OU horario_confirmado forem true"}`;
@@ -243,7 +265,7 @@ Responda SOMENTE com um JSON válido, neste formato exato, sem nenhum texto ante
   const userPrompt = `Lead: ${leadNome || 'sem nome informado'}
 Produto de interesse: ${produto || 'não informado'}
 Histórico da conversa (mais antiga primeiro):
-${historicoConversa.map((m) => `${m.de === 'lead' ? 'Lead' : CONSULTOR_NOME}: ${m.texto}`).join('\n')}`;
+${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Lead' : CONSULTOR_NOME}: ${m.texto}`).join('\n')}`;
 
   const textoCru = await chamarClaude(systemPrompt, userPrompt, 300);
 

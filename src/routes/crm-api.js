@@ -1,5 +1,9 @@
 const express = require('express');
-const { getCrmConfig, salvarCrmConfig, getGoogleAgendaConfig, salvarGoogleAgendaConfig } = require('../db/store');
+const {
+  getCrmConfig, salvarCrmConfig,
+  getGoogleAgendaConfig, salvarGoogleAgendaConfig,
+  getExemplosDeTom, salvarExemplosDeTom,
+} = require('../db/store');
 
 const router = express.Router();
 router.use(express.json());
@@ -34,6 +38,16 @@ router.post('/google-agenda', (req, res) => {
   const querConectar = Boolean(req.body?.querConectar);
   const config = salvarGoogleAgendaConfig({ querConectar });
   res.json(config);
+});
+
+// Exemplos de mensagens reais do consultor, usados como referencia de tom.
+router.get('/exemplos-tom', (req, res) => {
+  res.json({ exemplos: getExemplosDeTom() });
+});
+
+router.post('/exemplos-tom', (req, res) => {
+  const exemplos = Array.isArray(req.body?.exemplos) ? req.body.exemplos : [];
+  res.json({ exemplos: salvarExemplosDeTom(exemplos) });
 });
 
 module.exports = router;

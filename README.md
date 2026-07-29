@@ -299,6 +299,45 @@ Passei o projeto inteiro a limpo duas vezes procurando falhas. As mais important
 - Um texto do site ainda mencionava o prefixo `[TESTE]` que eu já tinha
   removido — corrigido.
 
+## Botão de emergência (pausar tudo)
+
+No quadro de leads tem um botão **Pausar envios**. Ele para na hora TODOS os
+envios automáticos — a sequência e as respostas a leads. Os dados ficam
+intactos: mensagens que chegarem são registradas normalmente, só não recebem
+resposta automática até você retomar. Use se notar a IA respondendo algo
+errado, ou se precisar mexer em alguma configuração com calma.
+
+## Segurança
+
+- **Código de acesso com proteção contra força bruta**: 5 tentativas
+  erradas bloqueiam aquele IP por 15 minutos. Sem isso, alguém com a URL
+  do site conseguiria testar as 1.000.000 de combinações de 6 dígitos
+  automaticamente.
+- **APIs protegidas por sessão**: digitar o código certo gera um token que
+  vale 12 horas. Sem esse token, nenhuma rota de dados responde — antes,
+  qualquer um com a URL conseguia baixar a lista completa de leads sem
+  digitar código nenhum, mesmo com a tela "protegida".
+- Os webhooks (Z-API e RD Station) ficam fora dessa proteção de propósito —
+  eles vêm de fora e não têm como enviar token.
+
+Isso não substitui os cuidados normais de LGPD: são dados pessoais de
+clientes reais, então vale limitar quem tem o código e trocá-lo se alguém
+sair da equipe.
+
+## Backup
+
+A seção **Backup** baixa tudo (leads, conversas, configurações) num arquivo
+JSON, e restaura a partir dele. O Volume do Railway já protege contra perda
+em deploy, mas não contra o Volume em si se perder — vale baixar um backup
+por semana e guardar fora do Railway.
+
+## Estilo das mensagens
+
+A seção **Estilo das mensagens** guarda exemplos reais de mensagens suas.
+Quanto mais exemplos (até 8), mais a IA escreve parecido com você em vez de
+genérico. É a melhoria de maior impacto pelo menor esforço — vale colar ali
+algumas conversas reais suas assim que possível.
+
 ## Estrutura do projeto
 
 ```
@@ -310,12 +349,14 @@ src/
     leads-api.js               # lista/cria leads, importação em lote
     teste-api.js                # gera mensagem de teste + simulação de conversa completa
     acesso-api.js               # verifica/troca o código de acesso ao site
-    crm-api.js                  # guarda a chave de integração com o CRM
+    crm-api.js                  # config do CRM, Google Agenda e exemplos de tom
+    backup-api.js               # exporta/restaura o banco inteiro
   services/
     claude.js                  # gera a mensagem humanizada
     whatsapp.js                # envia mensagem via Z-API
     media.js                    # converte imagem/figurinha/áudio recebidos em texto
     openai.js                   # transcreve áudio via Whisper (precisa de OPENAI_API_KEY)
+    sessao.js                   # tokens de sessão e bloqueio de força bruta
     scheduler.js               # controla a cadência 2x/dia por 3 dias
   db/
     store.js                   # guarda leads, código de acesso, config do CRM e exemplos de sucesso
