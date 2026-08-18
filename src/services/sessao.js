@@ -64,8 +64,8 @@ function sessaoValida(token) {
   return true;
 }
 
-// Middleware que protege as rotas de dados. Os webhooks (Z-API, RD Station)
-// NAO passam por aqui - eles vem de fora e nao tem como mandar token.
+// Middleware que protege as rotas de dados. O webhook da Z-API
+// NAO passa por aqui - vem de fora e nao tem como mandar token.
 function exigirSessao(req, res, next) {
   const token = req.headers['x-sessao'];
   if (!sessaoValida(token)) {

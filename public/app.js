@@ -1,18 +1,12 @@
 // ===== Labels compartilhados =====
 const LABELS_STATUS = {
-  sequence_active: 'Sequência ativa',
+  sequence_active: 'Aguardando envio',
+  aguardando_resposta: 'Mensagem enviada',
   conversa_ia: 'IA conversando',
   human_handoff: 'Aguardando você',
   cold_nurture: 'Nutrição futura',
   encerrado: 'Encerrado',
 };
-const LABELS_PRODUTO = {
-  agro: 'Agro/rural',
-  imoveis: 'Imóveis',
-  caminhoes: 'Caminhões',
-  credito_empresarial: 'Crédito empresarial',
-};
-
 // ===== Chamadas autenticadas =====
 // Todas as rotas de dados exigem o token de sessão que o servidor entrega
 // quando o código de acesso é digitado certo. Se a sessão expirar (12h),
@@ -82,13 +76,11 @@ function rotear() {
   if (view === 'lead' && param) {
     mostrarView('lead');
     carregarDetalheLead(param);
-  } else if (['novo', 'testar', 'codigo', 'crm', 'relatorio', 'agenda', 'metricas', 'tom', 'backup'].includes(view)) {
+  } else if (['novo', 'testar', 'codigo', 'config', 'relatorio', 'metricas', 'backup'].includes(view)) {
     mostrarView(view);
-    if (view === 'crm') carregarCrm();
+    if (view === 'config') carregarConfig();
     if (view === 'relatorio') prepararRelatorio();
-    if (view === 'agenda') carregarAgenda();
     if (view === 'metricas') carregarMetricas();
-    if (view === 'tom') carregarExemplosTom();
   } else {
     mostrarView('leads');
     carregarLeads();
@@ -101,12 +93,8 @@ if (appEl.style.display !== 'none') rotear();
 // ===== VIEW: quadro de leads (estilo CRM, colunas por contato) =====
 
 const COLUNAS_QUADRO = [
-  { chave: 'contato1', titulo: '1º contato' },
-  { chave: 'contato2', titulo: '2º contato' },
-  { chave: 'contato3', titulo: '3º contato' },
-  { chave: 'contato4', titulo: '4º contato' },
-  { chave: 'contato5', titulo: '5º contato' },
-  { chave: 'contato6', titulo: '6º contato' },
+  { chave: 'aguardando_envio', titulo: 'Aguardando envio' },
+  { chave: 'enviado', titulo: 'Mensagem enviada' },
   { chave: 'conversando', titulo: 'Conversando' },
   { chave: 'aguardando', titulo: 'Aguardando você' },
   { chave: 'reuniao', titulo: 'Reunião agendada' },
@@ -119,17 +107,15 @@ const COLUNAS_QUADRO = [
 // assim que uma mensagem e mandada ou o status muda, sem precisar de
 // nenhuma logica extra pra mover nada.
 function colunaDoLead(lead) {
-  if (lead.status === 'sequence_active') {
-    const n = Math.min(Math.max(lead.attemptsSent || 1, 1), 6);
-    return `contato${n}`;
-  }
+  if (lead.status === 'sequence_active') return 'aguardando_envio';
+  if (lead.status === 'aguardando_resposta') return 'enviado';
   if (lead.status === 'conversa_ia') return 'conversando';
   if (lead.status === 'human_handoff') return 'aguardando';
   if (lead.status === 'cold_nurture') return 'perdido';
   if (lead.status === 'encerrado') {
     return lead.motivoEncerramento === 'horario_confirmado' ? 'reuniao' : 'encerrado_manual';
   }
-  return 'contato1';
+  return 'aguardando_envio';
 }
 
 let todosOsLeads = [];
@@ -175,7 +161,6 @@ function renderizarQuadro() {
             <a class="cartao-lead" href="#lead/${encodeURIComponent(lead.phone)}">
               <span class="nome">${lead.nome || '—'}${lead.teste ? '<span class="selo-teste">TESTE</span>' : ''}</span>
               <span class="telefone">${lead.phone}</span>
-              <span class="produto-card">${LABELS_PRODUTO[lead.produto] || lead.produto || '—'}</span>
             </a>
           `).join('') : '<p style="font-size:12px; color:var(--texto-fraco); padding:6px 4px;">Vazio</p>'}
         </div>
@@ -222,15 +207,14 @@ document.getElementById('btn-exportar').addEventListener('click', async () => {
   const linhas = leads.map((l) => ({
     Nome: l.nome || '',
     Telefone: l.phone,
-    Produto: LABELS_PRODUTO[l.produto] || l.produto || '',
     Status: LABELS_STATUS[l.status] || l.status,
     'Mensagens enviadas': l.attemptsSent || 0,
-    'Início da sequência': l.sequenceStartedAt || '',
+    'Entrou em': l.sequenceStartedAt || '',
   }));
   const planilha = XLSX.utils.json_to_sheet(linhas);
   const livro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(livro, planilha, 'Leads');
-  XLSX.writeFile(livro, `leads-fouragro-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.writeFile(livro, `leads-${new Date().toISOString().slice(0, 10)}.xlsx`);
 });
 
 const inputArquivo = document.getElementById('arquivo-importar');
@@ -245,7 +229,6 @@ inputArquivo.addEventListener('change', async (evento) => {
   const leadsParaImportar = linhas.map((linha) => ({
     nome: linha.Nome || linha.nome || '',
     telefone: linha.Telefone || linha.telefone || linha.WhatsApp || '',
-    produto: (linha.Produto || linha.produto || 'geral').toString().toLowerCase(),
   }));
   const resp = await api('/api/leads/lote', {
     method: 'POST',
@@ -273,7 +256,6 @@ document.getElementById('form-novo').addEventListener('submit', async (evento) =
   const dados = {
     nome: document.getElementById('novo-nome').value.trim(),
     telefone: document.getElementById('novo-telefone').value.trim(),
-    produto: document.getElementById('novo-produto').value,
   };
 
   try {
@@ -323,8 +305,6 @@ document.getElementById('form-teste').addEventListener('submit', async (evento) 
   const dados = {
     nome: document.getElementById('nome').value.trim(),
     telefone: document.getElementById('telefone').value.trim(),
-    produto: document.getElementById('produto').value,
-    tentativa: document.getElementById('tentativa').value,
   };
 
   try {
@@ -367,7 +347,6 @@ document.getElementById('form-whatsapp').addEventListener('submit', async (event
   const dados = {
     nome: document.getElementById('wa-nome').value.trim(),
     telefone,
-    produto: document.getElementById('wa-produto').value,
   };
 
   try {
@@ -397,7 +376,6 @@ document.getElementById('form-whatsapp').addEventListener('submit', async (event
 // -- simular na tela --
 let simHistorico = [];
 let simNome = '';
-let simProduto = '';
 let simEncerrada = false;
 
 function simAdicionarBolha(de, texto) {
@@ -423,7 +401,6 @@ document.getElementById('btn-iniciar-simulacao').addEventListener('click', async
   document.getElementById('sim-conversa').innerHTML = '';
   document.getElementById('sim-encaminhado').style.display = 'none';
   simNome = document.getElementById('sim-nome').value.trim();
-  simProduto = document.getElementById('sim-produto').value;
 
   btnIniciar.textContent = 'Gerando…';
   btnIniciar.disabled = true;
@@ -432,7 +409,7 @@ document.getElementById('btn-iniciar-simulacao').addEventListener('click', async
     const resp = await api('/api/simular/iniciar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: simNome, produto: simProduto }),
+      body: JSON.stringify({ nome: simNome }),
     });
     const resultado = await resp.json();
     if (!resp.ok) throw new Error(resultado.erro);
@@ -463,7 +440,7 @@ async function simEnviarComoLead() {
     const resp = await api('/api/simular/responder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: simNome, produto: simProduto, historico: simHistorico }),
+      body: JSON.stringify({ nome: simNome, historico: simHistorico }),
     });
     const resultado = await resp.json();
     if (!resp.ok) throw new Error(resultado.erro);
@@ -501,7 +478,6 @@ async function carregarDetalheLead(telefone) {
   document.getElementById('lead-nome').textContent = lead.nome || telefone;
   document.getElementById('lead-resumo').innerHTML = `
     <span class="status ${lead.status}"><span class="ponto"></span>${LABELS_STATUS[lead.status] || lead.status}</span>
-    &nbsp;·&nbsp; ${LABELS_PRODUTO[lead.produto] || lead.produto || '—'}
     &nbsp;·&nbsp; <span style="font-family: var(--font-mono); font-size: 13px;">${lead.phone}</span>
   `;
 
@@ -564,36 +540,6 @@ document.getElementById('form-codigo').addEventListener('submit', async (evento)
   document.getElementById('form-codigo').reset();
 });
 
-// ===== VIEW: integração com o CRM =====
-
-async function carregarCrm() {
-  const resp = await api('/api/crm');
-  const dados = await resp.json();
-  document.getElementById('crm-url').value = dados.urlBase || '';
-  document.getElementById('crm-status').textContent = dados.apiKeyDefinida
-    ? 'Já existe uma chave salva. Salvar de novo substitui.'
-    : 'Nenhuma chave salva ainda.';
-}
-
-document.getElementById('form-crm').addEventListener('submit', async (evento) => {
-  evento.preventDefault();
-  const sucessoBox = document.getElementById('crm-sucesso');
-  const dados = {
-    urlBase: document.getElementById('crm-url').value.trim(),
-    apiKey: document.getElementById('crm-chave').value.trim(),
-  };
-  await api('/api/crm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dados),
-  });
-  sucessoBox.textContent = 'Salvo.';
-  sucessoBox.style.display = 'block';
-  document.getElementById('crm-chave').value = '';
-  carregarCrm();
-  setTimeout(() => { sucessoBox.style.display = 'none'; }, 2500);
-});
-
 // ===== VIEW: relatório diário =====
 
 let relatorioAtual = [];
@@ -633,7 +579,6 @@ async function gerarRelatorio() {
     relatorioAtual.push({
       nome: lead.nome || '—',
       telefone: lead.phone,
-      produto: LABELS_PRODUTO[lead.produto] || lead.produto || '—',
       status: LABELS_STATUS[lead.status] || lead.status,
       resumo: partes.join(' · '),
     });
@@ -665,7 +610,6 @@ document.getElementById('btn-exportar-relatorio').addEventListener('click', asyn
   const linhas = relatorioAtual.map((item) => ({
     Nome: item.nome,
     Telefone: item.telefone,
-    Produto: item.produto,
     Status: item.status,
     'O que aconteceu': item.resumo,
   }));
@@ -674,27 +618,6 @@ document.getElementById('btn-exportar-relatorio').addEventListener('click', asyn
   XLSX.utils.book_append_sheet(livro, planilha, 'Relatório');
   const data = document.getElementById('relatorio-data').value;
   XLSX.writeFile(livro, `relatorio-${data}.xlsx`);
-});
-
-// ===== VIEW: Google Agenda =====
-
-async function carregarAgenda() {
-  const resp = await api('/api/google-agenda');
-  const config = await resp.json();
-  document.getElementById('agenda-querconectar').checked = Boolean(config.querConectar);
-}
-
-document.getElementById('btn-salvar-agenda').addEventListener('click', async () => {
-  const querConectar = document.getElementById('agenda-querconectar').checked;
-  await api('/api/google-agenda', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ querConectar }),
-  });
-  const sucesso = document.getElementById('agenda-sucesso');
-  sucesso.textContent = 'Salvo.';
-  sucesso.style.display = 'block';
-  setTimeout(() => { sucesso.style.display = 'none'; }, 2500);
 });
 
 // ===== VIEW: métricas (taxa de retorno dos leads) =====
@@ -727,53 +650,240 @@ async function carregarMetricas() {
   // confirmou um horário - não qualquer encerramento (que também pode ser
   // você assumindo manualmente por outro motivo).
   const encerrados = leads.filter((l) => l.motivoEncerramento === 'horario_confirmado').length;
-  const semResposta = leads.filter((l) => l.status === 'cold_nurture').length;
+  const semResposta = leads.filter((l) => l.status === 'aguardando_resposta').length;
   const taxaRetorno = total ? Math.round((respondeu / total) * 100) : 0;
 
   container.innerHTML = [
     cartaoMetrica(total, 'Leads no total'),
     cartaoMetrica(`${taxaRetorno}%`, 'Taxa de retorno'),
     cartaoMetrica(encerrados, 'Reuniões marcadas'),
-    cartaoMetrica(semResposta, 'Sem resposta (6 tentativas)'),
+    cartaoMetrica(semResposta, 'Sem resposta ainda'),
   ].join('');
 }
 
-// ===== VIEW: estilo das mensagens (exemplos de tom) =====
+// ===== VIEW: configurações =====
+// Identidade, mensagens de abertura, regras da conversa e horários. É daqui
+// que sai TUDO que a IA fala e obedece - nada disso está no código, então
+// mudar o comportamento do sistema é mudar esta tela.
 
-function renderizarExemplosTom(exemplos) {
-  const lista = document.getElementById('tom-lista');
-  lista.innerHTML = exemplos.map((texto, i) => `
+const LISTAS_CONFIG = {
+  'cfg-mensagem': {
+    container: 'cfg-mensagens',
+    rotulo: 'Mensagem',
+    vazio: 'Nenhuma mensagem cadastrada. Enquanto não houver pelo menos uma, nada é enviado pra ninguém.',
+  },
+  'cfg-regra': {
+    container: 'cfg-regras',
+    rotulo: 'Regra',
+    vazio: 'Nenhuma regra cadastrada. Sem regras, a IA encaminha pra você em vez de arriscar responder por conta própria.',
+  },
+};
+
+// Texto vai pra dentro de um <textarea>, então & e < precisam ser escapados -
+// sem isso, uma mensagem que contenha "<" quebraria o HTML da tela.
+function escaparParaTextarea(texto) {
+  return (texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+}
+
+function valoresDe(classe) {
+  return [...document.querySelectorAll('.' + classe)].map((campo) => campo.value);
+}
+
+function renderizarLista(classe, itens) {
+  const { container, rotulo, vazio } = LISTAS_CONFIG[classe];
+  const alvo = document.getElementById(container);
+  if (!itens.length) {
+    alvo.innerHTML = '<p class="dica">' + vazio + '</p>';
+    return;
+  }
+  alvo.innerHTML = itens.map((texto, i) => `
     <div class="campo">
-      <label>Exemplo ${i + 1}</label>
-      <textarea class="exemplo-tom" rows="4">${texto.replace(/</g, '&lt;')}</textarea>
+      <label>${rotulo} ${i + 1}</label>
+      <textarea class="${classe}" rows="4">${escaparParaTextarea(texto)}</textarea>
+      <button type="button" class="botao secundario btn-remover-item" data-classe="${classe}" data-indice="${i}" style="margin-top:8px;">Remover</button>
     </div>
   `).join('');
 }
 
-async function carregarExemplosTom() {
-  const resp = await api('/api/exemplos-tom');
-  const dados = await resp.json();
-  renderizarExemplosTom(dados.exemplos);
+
+// --- WhatsApps conectados ---
+// Cada numero e uma instancia da Z-API. A lista vazia significa "usa as
+// credenciais das variaveis de ambiente", que e o modo de um numero so.
+
+function escaparAtributo(texto) {
+  return (texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 }
 
-document.getElementById('btn-add-exemplo').addEventListener('click', () => {
-  const atuais = [...document.querySelectorAll('.exemplo-tom')].map((t) => t.value);
-  renderizarExemplosTom([...atuais, '']);
+function valoresDosWhatsapps() {
+  return [...document.querySelectorAll('.cartao-whatsapp')].map((cartao) => ({
+    id: cartao.dataset.id || undefined,
+    apelido: cartao.querySelector('.wa-apelido').value.trim(),
+    instanceId: cartao.querySelector('.wa-instance').value.trim(),
+    token: cartao.querySelector('.wa-token').value.trim(),
+    clientToken: cartao.querySelector('.wa-client-token').value.trim(),
+    nomeExibicao: cartao.querySelector('.wa-nome').value.trim(),
+    avisarNumero: cartao.querySelector('.wa-avisar').value.trim(),
+    ativo: cartao.querySelector('.wa-ativo').checked,
+    tokenSalvo: cartao.dataset.tokenSalvo === 'sim',
+    clientTokenSalvo: cartao.dataset.clientTokenSalvo === 'sim',
+  }));
+}
+
+function renderizarWhatsapps(lista) {
+  const alvo = document.getElementById('cfg-whatsapps');
+  if (!lista.length) {
+    alvo.innerHTML = '<p class="dica">Nenhum número cadastrado — o sistema está usando as credenciais das variáveis de ambiente, ou seja, um número só.</p>';
+    return;
+  }
+  alvo.innerHTML = lista.map((w, i) => `
+    <div class="cartao-whatsapp" data-id="${escaparAtributo(w.id || '')}" data-token-salvo="${w.tokenSalvo ? 'sim' : 'nao'}" data-client-token-salvo="${w.clientTokenSalvo ? 'sim' : 'nao'}" style="border:1px solid rgba(255,255,255,0.14); border-radius:8px; padding:18px; margin-bottom:18px;">
+      <div class="campo">
+        <label>Apelido</label>
+        <input type="text" class="wa-apelido" value="${escaparAtributo(w.apelido)}" placeholder="Ex: Número 1">
+      </div>
+      <div class="campo">
+        <label>Instance ID (Z-API)</label>
+        <input type="text" class="wa-instance" value="${escaparAtributo(w.instanceId)}">
+      </div>
+      <div class="campo">
+        <label>Token (Z-API)</label>
+        <input type="password" class="wa-token" placeholder="${w.tokenSalvo ? 'já salvo — deixe em branco pra manter' : 'cole o token'}">
+      </div>
+      <div class="campo">
+        <label>Client-Token (Z-API)</label>
+        <input type="password" class="wa-client-token" placeholder="${w.clientTokenSalvo ? 'já salvo — deixe em branco pra manter' : 'cole o client-token'}">
+      </div>
+      <div class="campo">
+        <label>Nome nas mensagens (opcional)</label>
+        <input type="text" class="wa-nome" value="${escaparAtributo(w.nomeExibicao)}" placeholder="Em branco = usa o nome da aba Identidade">
+      </div>
+      <div class="campo">
+        <label>Avisos vão para (opcional)</label>
+        <input type="text" class="wa-avisar" value="${escaparAtributo(w.avisarNumero)}" placeholder="Em branco = vão pro número padrão do sistema">
+      </div>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:12px;">
+        <input type="checkbox" class="wa-ativo" ${w.ativo ? 'checked' : ''} style="width:auto;">
+        Ativo (entra no rodízio e recebe leads novos)
+      </label>
+      ${w.id
+        ? `<p class="dica">Webhook desse número — cole na Z-API em "ao receber mensagem":<br><code style="word-break:break-all;">${location.origin}/webhooks/whatsapp/${w.id}</code></p>`
+        : '<p class="dica">Salve pra gerar a URL de webhook desse número.</p>'}
+      <button type="button" class="botao secundario btn-remover-whatsapp" data-indice="${i}">Remover número</button>
+    </div>
+  `).join('');
+}
+
+document.getElementById('btn-add-whatsapp').addEventListener('click', () => {
+  renderizarWhatsapps([...valoresDosWhatsapps(), {
+    id: '', apelido: '', instanceId: '', nomeExibicao: '', avisarNumero: '',
+    ativo: true, tokenSalvo: false, clientTokenSalvo: false,
+  }]);
 });
 
-document.getElementById('btn-salvar-tom').addEventListener('click', async () => {
-  const exemplos = [...document.querySelectorAll('.exemplo-tom')].map((t) => t.value).filter((t) => t.trim());
-  const resp = await api('/api/exemplos-tom', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ exemplos }),
+async function carregarConfig() {
+  const resp = await api('/api/config');
+  const cfg = await resp.json();
+
+  document.getElementById('cfg-nome').value = cfg.identidade.nome || '';
+  document.getElementById('cfg-empresa').value = cfg.identidade.empresa || '';
+  document.getElementById('cfg-contexto').value = cfg.identidade.contexto || '';
+
+  renderizarWhatsapps(cfg.whatsapps || []);
+  renderizarLista('cfg-mensagem', cfg.mensagens);
+  renderizarLista('cfg-regra', cfg.regras);
+
+  document.getElementById('cfg-hora-inicio').value = cfg.horarios.inicio;
+  document.getElementById('cfg-hora-fim').value = cfg.horarios.fim;
+  document.getElementById('cfg-atraso-min').value = cfg.horarios.atrasoMinMinutos;
+  document.getElementById('cfg-atraso-max').value = cfg.horarios.atrasoMaxMinutos;
+  document.getElementById('cfg-intervalo-min').value = cfg.horarios.intervaloMinSegundos;
+  document.getElementById('cfg-intervalo-max').value = cfg.horarios.intervaloMaxSegundos;
+  document.getElementById('cfg-max-respostas').value = cfg.maxRespostasAutomaticas;
+}
+
+// Abas da tela de configuração (Identidade / Mensagens / Regras / Horários)
+document.querySelectorAll('#abas-config .aba').forEach((aba) => {
+  aba.addEventListener('click', () => {
+    document.querySelectorAll('#abas-config .aba').forEach((a) => a.classList.remove('ativa'));
+    aba.classList.add('ativa');
+    document.querySelectorAll('.painel-config').forEach((p) => { p.style.display = 'none'; });
+    document.getElementById('config-' + aba.dataset.painel).style.display = 'block';
   });
-  const dados = await resp.json();
-  renderizarExemplosTom(dados.exemplos);
-  const sucesso = document.getElementById('tom-sucesso');
-  sucesso.textContent = `Salvo — ${dados.exemplos.length} exemplo(s) em uso.`;
-  sucesso.style.display = 'block';
-  setTimeout(() => { sucesso.style.display = 'none'; }, 3000);
+});
+
+document.getElementById('btn-add-mensagem').addEventListener('click', () => {
+  renderizarLista('cfg-mensagem', [...valoresDe('cfg-mensagem'), '']);
+});
+
+document.getElementById('btn-add-regra').addEventListener('click', () => {
+  renderizarLista('cfg-regra', [...valoresDe('cfg-regra'), '']);
+});
+
+// Os botões "Remover" nascem junto com os itens, então o clique é escutado
+// no container - assim continua funcionando depois de cada re-render.
+document.getElementById('view-config').addEventListener('click', (evento) => {
+  const remocaoDeNumero = evento.target.closest('.btn-remover-whatsapp');
+  if (remocaoDeNumero) {
+    const indice = Number(remocaoDeNumero.dataset.indice);
+    renderizarWhatsapps(valoresDosWhatsapps().filter((_, i) => i !== indice));
+    return;
+  }
+
+  const botao = evento.target.closest('.btn-remover-item');
+  if (!botao) return;
+  const classe = botao.dataset.classe;
+  const indice = Number(botao.dataset.indice);
+  renderizarLista(classe, valoresDe(classe).filter((_, i) => i !== indice));
+});
+
+document.getElementById('btn-salvar-config').addEventListener('click', async () => {
+  const sucesso = document.getElementById('cfg-sucesso');
+  const erro = document.getElementById('cfg-erro');
+  sucesso.style.display = 'none';
+  erro.style.display = 'none';
+
+  const corpo = {
+    whatsapps: valoresDosWhatsapps(),
+    identidade: {
+      nome: document.getElementById('cfg-nome').value.trim(),
+      empresa: document.getElementById('cfg-empresa').value.trim(),
+      contexto: document.getElementById('cfg-contexto').value.trim(),
+    },
+    mensagens: valoresDe('cfg-mensagem').filter((t) => t.trim()),
+    regras: valoresDe('cfg-regra').filter((t) => t.trim()),
+    horarios: {
+      inicio: Number(document.getElementById('cfg-hora-inicio').value),
+      fim: Number(document.getElementById('cfg-hora-fim').value),
+      atrasoMinMinutos: Number(document.getElementById('cfg-atraso-min').value),
+      atrasoMaxMinutos: Number(document.getElementById('cfg-atraso-max').value),
+      intervaloMinSegundos: Number(document.getElementById('cfg-intervalo-min').value),
+      intervaloMaxSegundos: Number(document.getElementById('cfg-intervalo-max').value),
+    },
+    maxRespostasAutomaticas: Number(document.getElementById('cfg-max-respostas').value),
+  };
+
+  try {
+    const resp = await api('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    });
+    const dados = await resp.json();
+    if (!resp.ok) {
+      erro.textContent = dados.erro || 'Não consegui salvar.';
+      erro.style.display = 'block';
+      return;
+    }
+    renderizarWhatsapps(dados.whatsapps || []);
+    renderizarLista('cfg-mensagem', dados.mensagens);
+    renderizarLista('cfg-regra', dados.regras);
+    sucesso.textContent = `Salvo — ${(dados.whatsapps || []).filter((w) => w.ativo).length} número(s) ativo(s), ${dados.mensagens.length} mensagem(ns) e ${dados.regras.length} regra(s).`;
+    sucesso.style.display = 'block';
+    setTimeout(() => { sucesso.style.display = 'none'; }, 3000);
+  } catch (falha) {
+    erro.textContent = 'Não consegui falar com o servidor agora.';
+    erro.style.display = 'block';
+  }
 });
 
 // ===== VIEW: backup =====
@@ -784,7 +894,7 @@ document.getElementById('btn-baixar-backup').addEventListener('click', async () 
   const blob = new Blob([texto], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `backup-fouragro-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `backup-${new Date().toISOString().slice(0, 10)}.json`;
   link.click();
   URL.revokeObjectURL(link.href);
 });

@@ -1,14 +1,8 @@
 const express = require('express');
-const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead, upsertLead } = require('../db/store');
+const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead, upsertLead, normalizarTelefoneBR } = require('../db/store');
 
 const router = express.Router();
 router.use(express.json({ limit: '2mb' }));
-
-const PRODUTOS_VALIDOS = ['agro', 'imoveis', 'caminhoes', 'credito_empresarial'];
-
-function normalizarTelefone(valor) {
-  return (valor || '').replace(/\D/g, '');
-}
 
 router.get('/leads', (req, res) => {
   res.json(getAllLeads());
@@ -22,20 +16,14 @@ router.get('/leads/:telefone', (req, res) => {
 
 router.post('/leads', (req, res) => {
   const nome = (req.body?.nome || '').trim();
-  const telefone = normalizarTelefone(req.body?.telefone);
-  const produto = req.body?.produto;
-
-  if (!telefone || telefone.length < 12) {
-    return res.status(400).json({ erro: 'telefone invalido - use codigo do pais + DDD + numero, so digitos' });
+  const telefone = normalizarTelefoneBR(req.body?.telefone);
+  if (!telefone) {
+    return res.status(400).json({ erro: 'telefone invalido - informe DDD + numero (o 55 do Brasil entra sozinho)' });
   }
   if (!nome) {
     return res.status(400).json({ erro: 'nome e obrigatorio' });
   }
-  if (!PRODUTOS_VALIDOS.includes(produto)) {
-    return res.status(400).json({ erro: 'produto invalido' });
-  }
-
-  const lead = iniciarSequencia(telefone, { nome, produto });
+  const lead = iniciarSequencia(telefone, { nome });
   res.status(201).json(lead);
 });
 

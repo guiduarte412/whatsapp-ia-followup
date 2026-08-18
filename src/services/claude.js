@@ -1,77 +1,50 @@
 const axios = require('axios');
-const { getRecentSuccessfulExamples, getExemplosDeTom } = require('../db/store');
+const { getConfig } = require('../db/store');
 
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
-const CONSULTOR_NOME = process.env.CONSULTOR_NOME || 'Guilherme';
-const CONSULTOR_EMPRESA = process.env.CONSULTOR_EMPRESA || 'Fourcon | FourAgro';
 
-// Todos os leads hoje sao do mesmo produto (credito agro), entao o
-// conteudo basico que a IA pode mencionar e fixo - nao precisa mais variar
-// por segmento. Se isso mudar no futuro, e so voltar a variar por "produto".
-const TOPICO_PADRAO = 'Crédito rural, para quem precisa de capital para a propriedade.';
+// Este arquivo NAO contem nenhum texto de venda, nenhuma regra de negocio e
+// nenhum nome de produto. Tudo isso vem da tela de Configuracoes (mensagens,
+// regras, identidade), gravado em db.json. Se voce precisa mudar o que a IA
+// fala ou o que ela pode/nao pode dizer, e la - nao aqui.
 
-function textoDosTopicos() {
-  return `Como mencionar o produto (bem por cima, so pra situar o lead - os detalhes ficam pra ligacao):\n${TOPICO_PADRAO}`;
+// A IA escreve SEMPRE em primeira pessoa, como se fosse o proprio consultor
+// digitando. Ela nunca se apresenta como assistente, secretaria ou IA, e
+// nunca fala do consultor em terceira pessoa.
+// "conexao" e o numero de WhatsApp por onde essa conversa acontece. Se ele
+// tem um nome proprio cadastrado (caso de varios consultores dividindo o
+// sistema), e esse nome que a IA usa; senao usa o nome geral da Identidade.
+function blocoIdentidade(conexao) {
+  const { identidade } = getConfig();
+  const nome = (conexao && conexao.nomeExibicao) || identidade.nome || 'o consultor';
+  const partes = [
+    `Você é ${nome}${identidade.empresa ? `, da ${identidade.empresa}` : ''}.`,
+    `Você está respondendo mensagens de WhatsApp pessoalmente, em primeira pessoa - "eu", nunca
+"o consultor" ou "nossa equipe" como se fosse outra pessoa. Você NÃO é uma assistente, secretária
+ou IA de atendimento representando alguém: você escreve como se fosse ${nome} mesmo, sempre.`,
+  ];
+
+  if (identidade.contexto && identidade.contexto.trim()) {
+    partes.push(`Sobre o que você faz (use só isso como base, nunca invente nada além):
+${identidade.contexto.trim()}`);
+  }
+
+  partes.push(`Tamanho: mensagens de WhatsApp são curtas. Nunca escreva blocos longos. Varie o
+tamanho entre uma mensagem e outra - gente de verdade não manda sempre mensagens do mesmo tamanho.`);
+
+  return partes.join('\n\n');
 }
 
-// IDENTIDADE: a IA NUNCA e uma assistente ou uma "IA de atendimento" falando
-// EM NOME de alguem - ela escreve como se FOSSE literalmente o consultor,
-// sempre primeira pessoa ("eu"), nunca menciona "o consultor" como se fosse
-// uma terceira pessoa (nem mesmo quando vai encaminhar algo pra ele).
-const IDENTIDADE = `Você é ${CONSULTOR_NOME}, consultor financeiro brasileiro especializado em
-consórcio de crédito rural/agro, da ${CONSULTOR_EMPRESA}.
-Você está respondendo mensagens de WhatsApp pessoalmente, em primeira pessoa - "eu", nunca "o
-consultor" ou "nosso consultor" como se fosse outra pessoa. Você NÃO é uma assistente, secretária ou
-IA de atendimento representando alguém: você ESCREVE COMO SE FOSSE ${CONSULTOR_NOME} mesmo, sempre.
-
-Tom: formal e profissional, mais formal que informal - trate o lead com cordialidade e respeito,
-evite gírias, diminutivos ("minutinho", "rapidinho") e informalidade excessiva. Frases completas,
-bem escritas, sem soar frio ou robótico.
-
-Tamanho: mensagens de WhatsApp são curtas. Nunca escreva blocos longos. Varie o tamanho entre uma
-mensagem e outra (uma mais curta, a próxima um pouco mais longa) - gente de verdade não manda
-sempre mensagens do mesmo tamanho.`;
-
-// Monta o bloco de instrucao base. E funcao (nao constante) porque os
-// exemplos de tom agora sao editaveis pelo site - precisam ser lidos a
-// cada geracao, nao uma vez so quando o servidor sobe.
-function objetivoBase() {
-  const exemplos = getExemplosDeTom();
-  const blocoExemplos = exemplos.length
-    ? exemplos.map((e, i) => `Exemplo ${i + 1}:\n"${e}"`).join('\n\n')
-    : 'Nenhum exemplo cadastrado ainda.';
-
-  return `${IDENTIDADE}
-
-O objetivo de toda mensagem e conseguir marcar uma ligação ou reunião/chamada de vídeo com o lead -
-NUNCA explicar o consórcio em detalhe por texto. Mencione o produto de forma bem básica (ex: "sobre
-o crédito rural que você se interessou") e direcione para uma conversa por voz/vídeo, onde
-você explica tudo. Se o lead pedir detalhes de valor, prazo ou condição, a resposta certa é oferecer
-explicar isso numa ligação - não tentar explicar por mensagem.
-
-Escreva no seu próprio estilo. Exemplos reais de mensagens suas (use como referência de tom,
-formalidade e estrutura - não copie literalmente, cada mensagem é de um lead/situação diferente):
-${blocoExemplos}
-
-Regra crítica sobre contemplação: NUNCA prometa, insinue ou dê a entender que a contemplação
-(sorteio ou lance) está garantida, tem um prazo certo, ou é "rápida"/"fácil". Contemplação em
-consórcio é sempre incerta - depende de sorteio ou lance. Isso vale mesmo se o lead perguntar
-diretamente ou insistir.`;
+// As regras sao 100% definidas por voce na tela de Configuracoes. O codigo
+// so as repassa pra IA numeradas - nao acrescenta nem remove nenhuma.
+function blocoRegras() {
+  const regras = getConfig().regras.filter((r) => r && r.trim());
+  if (!regras.length) {
+    return 'Nenhuma regra específica foi cadastrada. Na dúvida sobre qualquer assunto, não invente: encaminhe.';
+  }
+  return `Regras que você precisa seguir, sem exceção:
+${regras.map((r, i) => `${i + 1}. ${r.trim()}`).join('\n')}`;
 }
-
-// Numero da tentativa (1 a 6) define o tom da mensagem.
-// Isso implementa a cadencia: 2 mensagens/dia por 3 dias.
-const TOM_POR_TENTATIVA = {
-  1: `Primeira tentativa depois da ligação não atendida. Siga a estrutura do exemplo real: saudação,
-se apresente como ${CONSULTOR_NOME} da ${CONSULTOR_EMPRESA}, mencione que recebeu a solicitação do
-lead pra aquele produto específico, peça uma ligação (pode estimar 10 minutos) pra entender a
-necessidade, e ofereça flexibilidade de horário.`,
-  2: 'Segunda tentativa, ainda no mesmo dia da primeira. Não precisa se reapresentar. Seja breve, só reforce a disponibilidade pra ligar, sem parecer insistente.',
-  3: 'Terceiro contato, novo dia. Pergunte de outro jeito se um horário pra falar rapidamente por telefone funciona pra ele.',
-  4: 'Quarto contato. Tom leve porém formal, uma pergunta direta e curta sobre o melhor horário, sem repetir o que já foi dito antes.',
-  5: 'Quinto contato, último dia da sequência. Reforce que é rápido e sem compromisso, só pra entender a necessidade dele.',
-  6: 'Sexta e última mensagem da sequência. Feche com cordialidade: avise que essa é a última tentativa por aqui e que o lead pode entrar em contato quando quiser.',
-};
 
 // Chamada compartilhada pra API da Claude. Se falhar, o erro devolvido
 // inclui o motivo real que a Anthropic mandou (chave invalida, modelo
@@ -140,7 +113,7 @@ async function descreverImagem({ base64, mimeType }) {
               { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
               {
                 type: 'text',
-                text: 'Descreva em 1 frase curta, em português, o que tem nessa imagem - do jeito que um consultor entenderia rapidamente o que o lead mandou (ex: "foto de um documento de identidade", "print de um extrato bancário", "figurinha de positivo/joinha"). Se for algo sensível (documento com dados pessoais, foto de rosto), diga isso genericamente sem tentar ler número nenhum.',
+                text: 'Descreva em 1 frase curta, em português, o que tem nessa imagem - do jeito que alguém entenderia rapidamente o que a pessoa mandou (ex: "foto de um documento", "print de uma tela de banco", "figurinha de positivo/joinha"). Se for algo sensível (documento com dados pessoais, foto de rosto), diga isso genericamente sem tentar ler número nenhum.',
               },
             ],
           },
@@ -165,107 +138,48 @@ async function descreverImagem({ base64, mimeType }) {
   }
 }
 
-async function gerarMensagem({ leadNome, produto, tentativa, historico }) {
-  // Trava a tentativa entre 1 e 6 - protege contra um valor invalido vindo
-  // de fora (ex: API de teste) fazer o prompt referenciar uma instrucao
-  // que nao existe.
-  const tentativaValida = Math.min(6, Math.max(1, Number(tentativa) || 1));
-
-  const exemplosBons = getRecentSuccessfulExamples(4);
-
-  const exemplosTexto = exemplosBons.length
-    ? exemplosBons
-        .map((e, i) => `Exemplo ${i + 1} (gerou resposta do lead): "${e.mensagem}"`)
-        .join('\n')
-    : 'Ainda sem exemplos anteriores registrados.';
-
-  const topicosTexto = textoDosTopicos();
-
-  const systemPrompt = `${objetivoBase()}
-
-Contexto: você acabou de ligar para esse lead e não conseguiu atendimento. Escreva UMA mensagem
-curta, humana e natural (nunca robótica, nunca com cara de disparo em massa).
-
-Regras:
-- Máximo 3 linhas curtas. Alterne o tamanho: se a mensagem anterior desta sequência foi mais
-  longa, essa deve ser bem curta (1-2 linhas), e vice-versa. Só a 1ª mensagem (a de apresentação)
-  pode ser um pouco mais longa.
-- Nunca usar linguagem de spam ("promoção imperdível", excesso de emoji, tudo em maiúsculas).
-- Termine perguntando um horário pra ligar ou conversar - esse é sempre o próximo passo.
-- Varie a abordagem de acordo com o número da tentativa (instrução abaixo).
-- Não invente informações sobre condições, valores ou prazos que não foram fornecidos.
-
-Instrução para esta tentativa (${tentativaValida} de 6): ${TOM_POR_TENTATIVA[tentativaValida]}
-
-${topicosTexto}
-
-Exemplos de mensagens que funcionaram bem no passado (use como referência de tom, não copie literalmente):
-${exemplosTexto}
-
-Responda APENAS com o texto da mensagem, sem aspas, sem explicações.`;
-
-  const userPrompt = `Lead: ${leadNome || 'sem nome informado'}
-Produto de interesse: ${produto || 'nao informado'}
-Historico de mensagens ja enviadas nesta sequencia: ${historico?.length ? historico.join(' | ') : 'nenhuma ainda'}`;
-
-  return chamarClaude(systemPrompt, userPrompt, 200);
-}
-
-// Continua a conversa depois que o lead responde. Diferente do
-// gerarMensagem (que so manda mensagem "as cegas"), aqui a IA le o que o
-// lead escreveu e decide, a cada turno, entre tres caminhos:
+// Continua a conversa depois que o cliente responde a mensagem de abertura.
+// A cada turno a IA escolhe entre tres caminhos:
 // 1) continuar a conversa ela mesma
-// 2) encaminhar pro consultor humano (duvida de valor, quer falar com
-//    pessoa, quer fechar negocio)
-// 3) confirmar um horario que o lead propos/aceitou e ENCERRAR o
-//    atendimento (o proprio ${CONSULTOR_NOME} aprova o horario, em primeira
-//    pessoa - nao pede aprovacao de ninguem)
-async function responderConversa({ leadNome, produto, historicoConversa }) {
-  const topicosTexto = textoDosTopicos();
+// 2) encaminhar pra voce (qualquer coisa que as regras nao cobrem)
+// 3) confirmar um horario que o cliente propos/aceitou e ENCERRAR - esse e
+//    o objetivo da esteira, entao ela fecha o agendamento em primeira
+//    pessoa, sem pedir aprovacao de ninguem.
+async function responderConversa({ leadNome, historicoConversa, conexao }) {
+  const nomeConsultor = (conexao && conexao.nomeExibicao) || getConfig().identidade.nome || 'Eu';
 
-  const systemPrompt = `${objetivoBase()}
+  const systemPrompt = `${blocoIdentidade(conexao)}
 
-Você está conversando por WhatsApp com um lead que respondeu ao seu contato.
+Você está conversando por WhatsApp com uma pessoa que respondeu ao seu contato.
 
-${topicosTexto}
+Seu objetivo é UM só: marcar um horário de conversa (ligação ou reunião) com ela. Tudo que for
+detalhe, explicação a fundo ou negociação fica pra esse horário - não se resolve por mensagem.
 
-Regras rígidas, sem exceção:
-- NUNCA informe valor de parcela, taxa, prazo de contrato, percentual de entrada ou qualquer
-  condição comercial - isso é sempre explicado na ligação, nunca por mensagem, mesmo que esteja
-  na lista de tópicos.
-- NUNCA prometa, insinue ou dê a entender que a contemplação (sorteio ou lance) está garantida,
-  tem prazo certo, ou é "rápida"/"fácil" - contemplação é sempre incerta. Se o lead perguntar
-  sobre contemplação, não responda por texto - encaminhe (é assunto pra explicar ao vivo).
-- NUNCA confirme fechamento de negócio, nem diga que "está aprovado" ou "garantido".
-- Quando o lead propuser ou aceitar um horário pra ligação/reunião: APROVE você mesmo, em primeira
-  pessoa, sem pedir aprovação de mais ninguém (ex: "Perfeito, te ligo nesse horário então!"). Isso
-  encerra o atendimento por aqui - marque "horario_confirmado": true. Você está confirmando sua
-  própria agenda, não a de outra pessoa.
-- Se o lead pedir qualquer detalhe de valor/condição, OU perguntar sobre contemplação, OU pedir
-  para falar com uma pessoa (fora o próprio contato que já está tendo com você), OU demonstrar que
-  já quer fechar negócio, marque "encaminhar_humano": true - esses casos precisam de você ao vivo,
-  não por mensagem.
-- Se o lead claramente encerrar a conversa sem marcar nada - agradecendo, se despedindo, dizendo
+${blocoRegras()}
+
+Além das regras acima, valem estas, que são estruturais:
+- Quando a pessoa propuser ou aceitar um horário: confirme você mesmo, em primeira pessoa, sem
+  pedir aprovação de mais ninguém (ex: "Perfeito, te ligo nesse horário então!"). Isso encerra o
+  atendimento automático - marque "horario_confirmado": true.
+- Se a pessoa pedir algo que as regras acima não cobrem, pedir pra falar com alguém, ou entrar em
+  qualquer assunto que você não tem como resolver por mensagem, marque "encaminhar_humano": true.
+- Se a pessoa claramente encerrar a conversa sem marcar nada - agradecendo, se despedindo, dizendo
   que vai pensar, ou dando qualquer sinal de que não quer continuar agora - NÃO insista tentando
   marcar horário de novo. Responda algo breve e cordial de despedida e marque
-  "encaminhar_humano": true (com o motivo "lead encerrou sem agendar"), pra parar por aqui em vez
-  de ficar tentando reengajar indefinidamente.
+  "encaminhar_humano": true (motivo: "encerrou sem agendar").
 - Nunca marque "horario_confirmado" e "encaminhar_humano" como true ao mesmo tempo - é sempre um
   ou outro, ou nenhum dos dois (segue a conversa normal).
-- Em qualquer um dos casos acima, sempre responda algo educado ao lead antes (nunca deixe ele sem
-  resposta) - só não avance a negociação nem confirme algo que exige uma ligação pra ser resolvido
-  de verdade.
-- Fora dessas situações, converse normalmente: tire dúvidas bem gerais, mantenha o interesse,
-  mensagens curtas (1-3 linhas, alternando entre mais curta e um pouco mais longa a cada troca),
-  sempre puxando para marcar a ligação/reunião.
+- Em qualquer caso, sempre responda algo educado antes (nunca deixe a pessoa sem resposta) - só não
+  avance nem confirme algo que precisa de você ao vivo pra ser resolvido de verdade.
+- Fora dessas situações, converse normalmente: mensagens curtas (1-3 linhas, alternando entre mais
+  curta e um pouco mais longa a cada troca), sempre puxando para marcar o horário.
 
 Responda SOMENTE com um JSON válido, neste formato exato, sem nenhum texto antes ou depois:
-{"resposta": "texto da mensagem para o lead (sempre preenchido)", "encaminhar_humano": true ou false, "horario_confirmado": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto (ex: horário confirmado, dúvida pendente), se encaminhar_humano OU horario_confirmado forem true"}`;
+{"resposta": "texto da mensagem para a pessoa (sempre preenchido)", "encaminhar_humano": true ou false, "horario_confirmado": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto (ex: horário confirmado, dúvida pendente), se encaminhar_humano OU horario_confirmado forem true"}`;
 
-  const userPrompt = `Lead: ${leadNome || 'sem nome informado'}
-Produto de interesse: ${produto || 'não informado'}
+  const userPrompt = `Pessoa: ${leadNome || 'sem nome informado'}
 Histórico da conversa (mais antiga primeiro):
-${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Lead' : CONSULTOR_NOME}: ${m.texto}`).join('\n')}`;
+${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Cliente' : nomeConsultor}: ${m.texto}`).join('\n')}`;
 
   const textoCru = await chamarClaude(systemPrompt, userPrompt, 300);
 
@@ -280,10 +194,10 @@ ${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Lead' : CONSULTO
 
     const parsed = JSON.parse(jsonLimpo);
 
-    // A regra e a IA sempre deixar uma resposta pro lead, mesmo quando vai
+    // A regra e a IA sempre deixar uma resposta, mesmo quando vai
     // encaminhar ou encerrar. Se por algum motivo o JSON vier valido mas
     // sem texto de resposta, trata como formato inesperado - melhor
-    // encaminhar por seguranca do que deixar o lead sem nenhuma mensagem.
+    // encaminhar por seguranca do que deixar a pessoa sem nenhuma mensagem.
     if (!parsed.resposta || !parsed.resposta.trim()) {
       throw new Error('resposta vazia');
     }
@@ -308,4 +222,4 @@ ${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Lead' : CONSULTO
   }
 }
 
-module.exports = { gerarMensagem, responderConversa, descreverImagem };
+module.exports = { responderConversa, descreverImagem };

@@ -1,7 +1,23 @@
 {
   "leads": {},
-  "examples": [],
   "codigoAcesso": "059597",
-  "crmConfig": {},
-  "googleAgenda": { "querConectar": false }
+  "config": {
+    "identidade": {
+      "nome": "",
+      "empresa": "",
+      "contexto": ""
+    },
+    "whatsapps": [],
+    "mensagens": [],
+    "regras": [],
+    "horarios": {
+      "inicio": 8,
+      "fim": 20,
+      "atrasoMinMinutos": 30,
+      "atrasoMaxMinutos": 60,
+      "intervaloMinSegundos": 20,
+      "intervaloMaxSegundos": 60
+    },
+    "maxRespostasAutomaticas": 5
+  }
 }

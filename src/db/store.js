@@ -16,13 +16,54 @@ const DB_PATH = path.join(PASTA_DADOS, 'db.json');
 const CODIGO_ACESSO_PADRAO = '059597';
 const PALAVRA_CHAVE_MESTRA = 'KAMILLY';
 
+// Configuracao editavel pelo site. Nada aqui e sobre um produto ou
+// segmento especifico: o texto das mensagens, as regras que a IA segue e
+// os horarios sao todos definidos na tela de Configuracoes, sem mexer no
+// codigo. Os padroes abaixo sao deliberadamente VAZIOS - o sistema nao
+// inventa conteudo nem manda mensagem enquanto nada for cadastrado.
+const CONFIG_PADRAO = {
+  identidade: {
+    nome: '',       // como voce se apresenta ("Aqui e o Fulano")
+    empresa: '',    // empresa que voce cita ao se apresentar
+    contexto: '',   // 1-2 linhas sobre o que voce faz / o que oferece
+  },
+  whatsapps: [],    // numeros conectados na Z-API (vazio = usa as variaveis de ambiente)
+  mensagens: [],    // mensagens de abertura da esteira (uma e sorteada por lead)
+  regras: [],       // regras que a IA precisa seguir na conversa
+  horarios: {
+    inicio: 8,            // hora em que os envios podem comecar (Brasilia)
+    fim: 20,              // hora em que os envios param (Brasilia)
+    atrasoMinMinutos: 30, // atraso minimo entre o lead entrar e a mensagem sair
+    atrasoMaxMinutos: 60, // atraso maximo (sorteado entre min e max)
+    intervaloMinSegundos: 20, // pausa minima entre um envio e o proximo
+    intervaloMaxSegundos: 60, // pausa maxima (sorteada entre min e max)
+  },
+  maxRespostasAutomaticas: 5, // trava: depois disso a IA passa a conversa pra voce
+};
+
+// Junta o que esta salvo com os padroes, campo a campo. Assim um banco
+// antigo (ou um backup restaurado de uma versao anterior) nunca chega no
+// resto do sistema com um pedaco de configuracao faltando.
+function mesclarConfig(salva) {
+  const c = salva || {};
+  return {
+    identidade: { ...CONFIG_PADRAO.identidade, ...(c.identidade || {}) },
+    whatsapps: Array.isArray(c.whatsapps) ? c.whatsapps : [],
+    mensagens: Array.isArray(c.mensagens) ? c.mensagens : [],
+    regras: Array.isArray(c.regras) ? c.regras : [],
+    horarios: { ...CONFIG_PADRAO.horarios, ...(c.horarios || {}) },
+    maxRespostasAutomaticas: Number(c.maxRespostasAutomaticas) || CONFIG_PADRAO.maxRespostasAutomaticas,
+  };
+}
+
 function load() {
   if (!fs.existsSync(DB_PATH)) {
-    return { leads: {}, examples: [], codigoAcesso: CODIGO_ACESSO_PADRAO, crmConfig: {} };
+    return { leads: {}, codigoAcesso: CODIGO_ACESSO_PADRAO, config: mesclarConfig(null) };
   }
   const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+  if (!db.leads) db.leads = {};
   if (!db.codigoAcesso) db.codigoAcesso = CODIGO_ACESSO_PADRAO;
-  if (!db.crmConfig) db.crmConfig = {};
+  db.config = mesclarConfig(db.config);
   return db;
 }
 
@@ -31,11 +72,101 @@ function save(db) {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
 
+// --- Configuracao (tudo editavel pelo site) ---
+
+function getConfig() {
+  return load().config;
+}
+
+function salvarConfig(parcial) {
+  const db = load();
+  const atual = db.config;
+  db.config = mesclarConfig({
+    identidade: { ...atual.identidade, ...(parcial.identidade || {}) },
+    whatsapps: parcial.whatsapps !== undefined ? parcial.whatsapps : atual.whatsapps,
+    mensagens: parcial.mensagens !== undefined ? parcial.mensagens : atual.mensagens,
+    regras: parcial.regras !== undefined ? parcial.regras : atual.regras,
+    horarios: { ...atual.horarios, ...(parcial.horarios || {}) },
+    maxRespostasAutomaticas: parcial.maxRespostasAutomaticas !== undefined
+      ? parcial.maxRespostasAutomaticas
+      : atual.maxRespostasAutomaticas,
+  });
+  save(db);
+  return db.config;
+}
+
+// Sorteia uma das mensagens cadastradas e troca {nome} pelo primeiro nome
+// do lead. Devolve null se nao houver nenhuma mensagem cadastrada - quem
+// chama decide o que fazer (o agendador avisa voce em vez de inventar
+// texto por conta propria).
+function montarMensagemDeAbertura(nomeDoLead) {
+  const validas = getConfig().mensagens.filter((m) => m && m.trim());
+  if (!validas.length) return null;
+  const escolhida = validas[Math.floor(Math.random() * validas.length)];
+  const primeiroNome = (nomeDoLead || '').trim().split(' ')[0] || '';
+  return escolhida
+    .replace(/\{nome\}/gi, primeiroNome)
+    // Sem nome cadastrado, {nome} vira vazio e sobraria "Oi , tudo bem?" -
+    // limpa o espaco orfao antes da pontuacao e os espacos duplicados.
+    .replace(/ +([,.!?;:])/g, '$1')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
+// --- WhatsApps conectados ---
+// Cada numero e uma instancia separada na Z-API. Ter mais de um divide o
+// volume: e volume por numero, nao volume total, que faz o WhatsApp
+// bloquear. Com a lista vazia o sistema cai nas variaveis de ambiente,
+// entao quem so tem um numero nao precisa cadastrar nada.
+
+function getWhatsapps() {
+  return getConfig().whatsapps;
+}
+
+function getWhatsappsAtivos() {
+  return getWhatsapps().filter((w) => w.ativo !== false && w.instanceId && w.token);
+}
+
+function getWhatsappPorId(id) {
+  if (!id) return null;
+  return getWhatsapps().find((w) => w.id === id) || null;
+}
+
+// Reveza entre os numeros ativos, na ordem, pra distribuir os leads por
+// igual. O ponteiro fica no banco (nao na memoria) pra continuar de onde
+// parou depois de um deploy - senao todo reinicio recomecaria no primeiro
+// numero e ele levaria mais carga que os outros.
+function escolherWhatsappParaNovoLead() {
+  const ativos = getWhatsappsAtivos();
+  if (!ativos.length) return null; // nenhum cadastrado: modo variavel de ambiente
+  const db = load();
+  const proximo = (Number(db.ultimoWhatsappIndice) || 0) % ativos.length;
+  db.ultimoWhatsappIndice = proximo + 1;
+  save(db);
+  return ativos[proximo];
+}
+
 // --- Leads ---
 
 function getLead(phone) {
   const db = load();
   return db.leads[phone] || null;
+}
+
+// Completa o codigo do pais em numero brasileiro digitado ou importado sem
+// ele: "(47) 98888-7777" e "47988887777" viram os dois 5547988887777.
+//
+// A decisao e por QUANTIDADE de digitos, nao por prefixo. Checar se "comeca
+// com 55" quebraria os numeros do DDD 55 (Rio Grande do Sul): 55988887777 e
+// um numero LOCAL de 11 digitos e precisa do 55 na frente do mesmo jeito,
+// virando 5555988887777.
+//
+// Devolve null quando nao da pra reconhecer como telefone brasileiro.
+function normalizarTelefoneBR(valor) {
+  const digitos = (valor || '').toString().replace(/[^0-9]/g, '');
+  if (digitos.length === 10 || digitos.length === 11) return '55' + digitos; // DDD + numero
+  if (digitos.length === 12 || digitos.length === 13) return digitos;        // ja veio com o 55
+  return null;
 }
 
 // Numeros brasileiros de celular tem 9 digitos depois do DDD (55 + DDD +
@@ -86,35 +217,43 @@ function getAllLeads() {
   );
 }
 
-// Ponto unico que inicia a sequencia de follow-up pra um lead. Usado tanto
-// pelo webhook do RD Station quanto pelo formulario manual do site - os
-// dois caem na mesma logica, pra nunca ficar desalinhado.
+// Ponto unico que coloca um lead na esteira. Usado tanto pela importacao
+// de planilha quanto pelo formulario manual do site - os dois caem na
+// mesma logica, pra nunca ficar desalinhado.
 // "teste: true" marca o lead como um teste (aparece com selo TESTE no
 // painel, pra nao confundir com lead real).
 //
 // IMPORTANTE: se o lead JA existe, nao reinicia nada. Sem isso, reimportar
-// a mesma planilha (ou o RD Station reenviar o mesmo lead) apagaria a
-// conversa inteira e comecaria a mandar mensagem de novo pra quem ja
-// estava sendo atendido.
-function iniciarSequencia(phone, { nome, produto, teste }) {
+// a mesma planilha apagaria a conversa inteira e comecaria a mandar
+// mensagem de novo pra quem ja estava sendo atendido.
+function iniciarSequencia(phone, { nome, teste }) {
   const existente = getLeadFlexivel(phone);
   if (existente) return { ...existente, jaExistia: true };
 
+  // O numero que abre a conversa e o mesmo que responde ate o fim. Se a
+  // abertura saisse de um numero e a resposta de outro, o cliente veria
+  // duas pessoas diferentes falando com ele.
+  const whatsapp = escolherWhatsappParaNovoLead();
+
+  const { atrasoMinMinutos, atrasoMaxMinutos } = getConfig().horarios;
+  const minimo = Math.max(0, Number(atrasoMinMinutos) || 0);
+  const maximo = Math.max(minimo, Number(atrasoMaxMinutos) || minimo);
   const agora = new Date();
-  // 1a mensagem: 30 a 60 min depois do lead entrar (sorteado, nunca fixo).
-  const primeiroEnvioEm = new Date(agora.getTime() + (30 + Math.random() * 30) * 60_000).toISOString();
+  // A mensagem sai num momento sorteado dentro da faixa configurada, pra
+  // nunca sair um disparo no mesmo minuto exato pra todo mundo.
+  const atrasoMs = (minimo + Math.random() * (maximo - minimo)) * 60_000;
 
   return upsertLead(phone, {
     nome,
-    produto,
     teste: Boolean(teste),
+    whatsappId: whatsapp ? whatsapp.id : null,
     status: 'sequence_active',
     sequenceStartedAt: agora.toISOString(),
     attemptsSent: 0,
     mensagensEnviadas: [],
     respostasAutomaticas: 0,
     conversa: [],
-    proximoEnvioEm: primeiroEnvioEm,
+    proximoEnvioEm: new Date(agora.getTime() + atrasoMs).toISOString(),
   });
 }
 
@@ -129,8 +268,8 @@ function removerLead(phone) {
 function iniciarSequenciaEmLote(linhas) {
   const resultado = { criados: 0, duplicados: 0, erros: [] };
   linhas.forEach((linha, indice) => {
-    const telefone = (linha.telefone || '').toString().replace(/\D/g, '');
-    if (!telefone || telefone.length < 12) {
+    const telefone = normalizarTelefoneBR(linha.telefone);
+    if (!telefone) {
       resultado.erros.push({ linha: indice + 1, motivo: 'telefone inválido' });
       return;
     }
@@ -138,14 +277,12 @@ function iniciarSequenciaEmLote(linhas) {
       resultado.erros.push({ linha: indice + 1, motivo: 'nome vazio' });
       return;
     }
-    const lead = iniciarSequencia(telefone, { nome: linha.nome, produto: linha.produto || 'agro' });
+    const lead = iniciarSequencia(telefone, { nome: linha.nome });
     if (lead.jaExistia) resultado.duplicados += 1;
     else resultado.criados += 1;
   });
   return resultado;
 }
-
-// --- Tópicos que a IA usa como referência de conteúdo (editável pelo site) ---
 
 // Adiciona uma mensagem (de: 'ia' ou 'lead') ao historico de conversa do
 // lead. E esse historico que a IA le pra continuar a conversa depois que
@@ -157,59 +294,6 @@ function appendConversa(phone, { de, texto }) {
   lead.conversa = [...(lead.conversa || []), { de, texto, timestamp: new Date().toISOString() }];
   save(db);
   return lead;
-}
-
-// --- Exemplos que "alimentam" o aprendizado da IA ---
-// Isso NAO re-treina o modelo (a Claude nao aprende sozinha em tempo real).
-// O que fazemos aqui e guardar os melhores exemplos reais (mensagens que
-// geraram resposta do lead) e reusa-los como referencia nas proximas geracoes.
-// Na pratica funciona como um "playbook vivo" que vai ficando mais afiado.
-
-function appendExample(example) {
-  const db = load();
-  db.examples.push({ ...example, createdAt: new Date().toISOString() });
-  // mantem só os 200 exemplos mais recentes pra nao crescer sem limite
-  if (db.examples.length > 200) {
-    db.examples = db.examples.slice(-200);
-  }
-  save(db);
-}
-
-function getRecentSuccessfulExamples(limit = 5) {
-  const db = load();
-  return db.examples
-    .filter((e) => e.responded === true)
-    .slice(-limit);
-}
-
-// --- Configuração de integração com o CRM (guardado pra vincular no futuro) ---
-// Por enquanto so guarda e devolve o que foi salvo - nao faz nenhuma chamada
-// pro CRM ainda. Serve de base pra quando a integração de verdade for feita.
-
-function getCrmConfig() {
-  return load().crmConfig;
-}
-
-function salvarCrmConfig(dados) {
-  const db = load();
-  db.crmConfig = { ...db.crmConfig, ...dados };
-  save(db);
-  return db.crmConfig;
-}
-
-// --- Preferência de conexão futura com o Google Agenda ---
-// Ainda não conecta de verdade (isso exige um fluxo de autorização do
-// Google) - por enquanto so guarda que voce quer ativar isso no futuro.
-
-function getGoogleAgendaConfig() {
-  return load().googleAgenda || { querConectar: false };
-}
-
-function salvarGoogleAgendaConfig(dados) {
-  const db = load();
-  db.googleAgenda = { ...(db.googleAgenda || {}), ...dados };
-  save(db);
-  return db.googleAgenda;
 }
 
 // --- Código de acesso pra ver os leads ---
@@ -246,29 +330,6 @@ function setPausado(pausado) {
   return db.pausado;
 }
 
-// --- Exemplos de tom (mensagens reais do consultor) ---
-// Quanto mais exemplos reais aqui, mais a IA escreve parecido com ele.
-// Comeca com o exemplo real que ele mandou, editavel pelo site depois.
-
-const EXEMPLOS_TOM_PADRAO = [
-  `Boa tarde, tudo bem?
-Aqui é o Guilherme, da Fourcon | FourAgro.
-Recebi sua solicitação de crédito rural e vou acompanhar seu atendimento.
-Podemos fazer uma ligação de 10 minutos para entender sua necessidade e encontrar a melhor solução? Se preferir, me informe o melhor horário que eu ligo.`,
-];
-
-function getExemplosDeTom() {
-  const db = load();
-  return db.exemplosDeTom || EXEMPLOS_TOM_PADRAO;
-}
-
-function salvarExemplosDeTom(exemplos) {
-  const db = load();
-  db.exemplosDeTom = exemplos.filter((e) => e && e.trim()).slice(0, 8);
-  save(db);
-  return db.exemplosDeTom;
-}
-
 // --- Backup completo ---
 // Exporta/importa o banco inteiro. O Volume do Railway ja protege contra
 // perda em deploy, mas nao contra o Volume em si se perder - por isso vale
@@ -284,6 +345,14 @@ function importarTudo(dados) {
 }
 
 module.exports = {
+  normalizarTelefoneBR,
+  getWhatsapps,
+  getWhatsappsAtivos,
+  getWhatsappPorId,
+  escolherWhatsappParaNovoLead,
+  getConfig,
+  salvarConfig,
+  montarMensagemDeAbertura,
   getLead,
   getLeadFlexivel,
   upsertLead,
@@ -292,19 +361,11 @@ module.exports = {
   iniciarSequencia,
   iniciarSequenciaEmLote,
   removerLead,
-  getCrmConfig,
+  appendConversa,
   getPausado,
   setPausado,
-  getExemplosDeTom,
-  salvarExemplosDeTom,
-  exportarTudo,
-  importarTudo,
-  salvarCrmConfig,
-  getGoogleAgendaConfig,
-  salvarGoogleAgendaConfig,
   verificarCodigoAcesso,
   alterarCodigoAcesso,
-  appendConversa,
-  appendExample,
-  getRecentSuccessfulExamples,
+  exportarTudo,
+  importarTudo,
 };

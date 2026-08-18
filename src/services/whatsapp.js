@@ -5,32 +5,53 @@ const axios = require('axios');
 // provedores desse tipo mudam o formato do endpoint com alguma frequencia:
 // https://developer.z-api.io
 
-function baseUrl() {
-  const { ZAPI_INSTANCE_ID, ZAPI_TOKEN } = process.env;
-  return `https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_TOKEN}`;
+// Uma "conexao" e um dos numeros cadastrados em Configuracoes > WhatsApps.
+// Quando nenhum foi cadastrado (conexao nula), cai nas variaveis de
+// ambiente - e o modo de quem so tem um numero, que continua funcionando
+// sem precisar cadastrar nada.
+function credenciais(conexao) {
+  if (conexao && conexao.instanceId && conexao.token) {
+    return {
+      instanceId: conexao.instanceId,
+      token: conexao.token,
+      clientToken: conexao.clientToken,
+    };
+  }
+  return {
+    instanceId: process.env.ZAPI_INSTANCE_ID,
+    token: process.env.ZAPI_TOKEN,
+    clientToken: process.env.ZAPI_CLIENT_TOKEN,
+  };
 }
 
-async function enviarMensagem(telefone, mensagem) {
+async function enviarMensagem(telefone, mensagem, conexao) {
+  const { instanceId, token, clientToken } = credenciais(conexao);
   try {
     return await axios.post(
-      `${baseUrl()}/send-text`,
+      `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`,
       { phone: telefone, message: mensagem },
-      { headers: { 'Client-Token': process.env.ZAPI_CLIENT_TOKEN } }
+      { headers: { 'Client-Token': clientToken } }
     );
   } catch (erro) {
     // A mensagem padrao do axios ("Request failed with status code 400")
     // nao diz o motivo. O corpo da resposta da Z-API costuma ter o motivo
     // de verdade (numero invalido, instancia desconectada, etc).
     const detalhe = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
-    throw new Error(`Z-API: ${detalhe}`);
+    // Com varios numeros, saber qual deles falhou e a primeira coisa que
+    // voce precisa - por isso o apelido entra na mensagem de erro.
+    const qual = conexao && conexao.apelido ? ` (${conexao.apelido})` : '';
+    throw new Error(`Z-API${qual}: ${detalhe}`);
   }
 }
 
-// Aviso interno pro consultor (usa o mesmo canal, mandando pro proprio numero dele)
-async function avisarConsultor(texto) {
-  const numero = process.env.CONSULTOR_WHATSAPP;
+// Aviso interno. Vai pro numero de quem cuida daquela conexao, se ele foi
+// informado no cadastro; senao pro CONSULTOR_WHATSAPP das variaveis de
+// ambiente. Sai pela propria conexao envolvida, entao com varios numeros os
+// avisos nao se concentram num so.
+async function avisarConsultor(texto, conexao) {
+  const numero = (conexao && conexao.avisarNumero) || process.env.CONSULTOR_WHATSAPP;
   if (!numero) return;
-  return enviarMensagem(numero, texto);
+  return enviarMensagem(numero, texto, conexao);
 }
 
 // Formato padrao dos avisos que envolvem um lead - sempre com nome, numero

@@ -1,16 +1,14 @@
 const express = require('express');
-const { getLeadFlexivel, upsertLead, appendConversa, appendExample, getPausado } = require('../db/store');
+const { getLeadFlexivel, upsertLead, appendConversa, getPausado, getConfig, getWhatsappPorId } = require('../db/store');
 const { avisarConsultor, enviarMensagem, formatarAvisoLead } = require('../services/whatsapp');
 const { responderConversa } = require('../services/claude');
 const { extrairTexto } = require('../services/media');
 
 const router = express.Router();
 
-// Numero maximo de respostas automaticas seguidas antes de forcar o
-// encaminhamento pro humano, mesmo que a IA ache que ainda da pra continuar.
-// E uma trava de seguranca: garante que uma conversa real sobre consorcio
-// nao fica indefinidamente só com a IA.
-const MAX_RESPOSTAS_AUTOMATICAS = Number(process.env.MAX_RESPOSTAS_AUTOMATICAS || 5);
+// O teto de respostas automaticas seguidas vem da tela de Configuracoes.
+// E uma trava de seguranca: garante que uma conversa real nao fica
+// indefinidamente so com a IA, mesmo que ela ache que da pra continuar.
 
 function normalizarTelefone(valor) {
   return (valor || '').toString().replace(/\D/g, '');
@@ -23,7 +21,13 @@ function normalizarTexto(valor) {
 // Configure essa URL como "webhook de mensagens recebidas" no painel da Z-API.
 // O formato exato do payload pode variar por versao da Z-API - confira a
 // documentacao atual e ajuste os campos abaixo se necessario.
-router.post('/whatsapp', express.json(), async (req, res) => {
+//
+// Com mais de um numero conectado, CADA instancia da Z-API aponta pra sua
+// propria URL (/webhooks/whatsapp/wa-1, /webhooks/whatsapp/wa-2, ...). E
+// assim que o sistema sabe por qual numero a resposta chegou, sem depender
+// do formato do payload. A URL sem apelido continua valendo pra quem tem um
+// numero so.
+router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, res) => {
   const payload = req.body;
 
   // Log do payload cru - se algo nao bater, da pra ver o formato real nos
@@ -40,6 +44,11 @@ router.post('/whatsapp', express.json(), async (req, res) => {
   }
 
   const telefoneLead = lead.phone;
+
+  // Responde SEMPRE pelo numero que recebeu a mensagem - e o numero que a
+  // pessoa esta vendo na tela dela. So se a URL nao disser qual e (webhook
+  // antigo, sem apelido) e que cai no numero que foi fixado no lead.
+  const conexao = getWhatsappPorId(req.params.whatsappId) || getWhatsappPorId(lead.whatsappId);
 
   // Botao de emergencia ligado: registra a mensagem do lead pra nao perder
   // nada, mas nao deixa a IA responder. Voce assume manualmente enquanto
@@ -72,7 +81,7 @@ router.post('/whatsapp', express.json(), async (req, res) => {
     // IA conhecida e ela for diferente. Sem essa mensagem de referencia
     // (ultimaDaIA ausente), e mais seguro nao fechar sozinho do que
     // arriscar fechar por engano.
-    if (ultimaDaIA && !ehEcoDaIA && ['sequence_active', 'conversa_ia', 'cold_nurture'].includes(lead.status)) {
+    if (ultimaDaIA && !ehEcoDaIA && ['sequence_active', 'aguardando_resposta', 'conversa_ia', 'cold_nurture'].includes(lead.status)) {
       appendConversa(telefoneLead, { de: 'ia', texto: textoSimples });
       upsertLead(telefoneLead, { status: 'encerrado', motivoEncerramento: 'assumido_manualmente' });
       console.log(`Lead ${telefoneLead} encerrado - mensagem manual detectada do numero conectado.`);
@@ -101,7 +110,7 @@ router.post('/whatsapp', express.json(), async (req, res) => {
         nome: lead.nome,
         telefone: telefoneLead,
         contexto: `Lead mandou uma mensagem de voz (${payload?.audio?.seconds || '?'}s), mas a transcrição automática ainda não está configurada (falta OPENAI_API_KEY no Railway). Ouça manualmente pelo WhatsApp por enquanto.`,
-      }));
+      }), conexao);
     } catch (erro) {
       // Se ate o aviso falhar (Z-API fora do ar, etc), so loga - nao pode
       // derrubar o processo por causa de uma promise sem catch.
@@ -121,48 +130,33 @@ router.post('/whatsapp', express.json(), async (req, res) => {
           nome: lead.nome,
           telefone: telefoneLead,
           contexto: `Nova mensagem: "${textoRecebido}"`,
-        }));
+        }), conexao);
       }
       return res.status(200).json({ ok: true });
     }
 
-    const primeiraResposta = lead.status === 'sequence_active';
-
-    if (primeiraResposta) {
-      // Primeira vez que esse lead responde -> registra como exemplo de
-      // sucesso (alimenta o "aprendizado" descrito no README) e para a
-      // sequencia de follow-up (o agendador so processa status sequence_active).
-      // Leads de teste nao entram no aprendizado, pra nao poluir os exemplos
-      // reais com conversa fabricada.
-      const ultimaMensagem = (lead.mensagensEnviadas || []).slice(-1)[0];
-      if (ultimaMensagem && !lead.teste) {
-        appendExample({
-          mensagem: ultimaMensagem,
-          tentativa: lead.attemptsSent,
-          responded: true,
-          phone: telefoneLead,
-        });
-      }
-    }
-
+    // Ate responder, o lead fica em 'aguardando_resposta' (mensagem da
+    // esteira ja enviada) ou 'sequence_active' (ainda na fila de envio -
+    // acontece se ele escrever antes da mensagem sair).
     appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
     const leadAtualizado = getLeadFlexivel(telefoneLead);
     const respostasAutomaticas = (leadAtualizado.respostasAutomaticas || 0) + 1;
+    const maxRespostas = getConfig().maxRespostasAutomaticas;
 
-    if (respostasAutomaticas > MAX_RESPOSTAS_AUTOMATICAS) {
+    if (respostasAutomaticas > maxRespostas) {
       upsertLead(telefoneLead, { status: 'human_handoff' });
       await avisarConsultor(formatarAvisoLead({
         nome: lead.nome,
         telefone: telefoneLead,
-        contexto: `Passou de ${MAX_RESPOSTAS_AUTOMATICAS} respostas automáticas seguidas. Assuma a conversa por aqui.`,
-      }));
+        contexto: `Passou de ${maxRespostas} respostas automáticas seguidas. Assuma a conversa por aqui.`,
+      }), conexao);
       return res.status(200).json({ ok: true });
     }
 
     const resultado = await responderConversa({
       leadNome: leadAtualizado.nome,
-      produto: leadAtualizado.produto,
       historicoConversa: leadAtualizado.conversa,
+      conexao,
     });
 
     // Manda a resposta pro lead em qualquer um dos casos - a IA sempre
@@ -171,7 +165,7 @@ router.post('/whatsapp', express.json(), async (req, res) => {
     // Z-API acabou de confirmar).
     if (resultado.resposta) {
       try {
-        await enviarMensagem(telefoneRecebido, resultado.resposta);
+        await enviarMensagem(telefoneRecebido, resultado.resposta, conexao);
         appendConversa(telefoneLead, { de: 'ia', texto: resultado.resposta });
       } catch (erroEnvio) {
         // Se nao conseguir mandar a resposta, o lead fica sem retorno - isso
@@ -181,7 +175,7 @@ router.post('/whatsapp', express.json(), async (req, res) => {
           nome: lead.nome,
           telefone: telefoneLead,
           contexto: `A IA tentou responder mas o envio falhou: ${erroEnvio.message}\nAssuma essa conversa manualmente.\nÚltima mensagem do lead: "${textoRecebido}"`,
-        })).catch(() => {});
+        }), conexao).catch(() => {});
         return res.status(200).json({ ok: true });
       }
     }
@@ -194,7 +188,7 @@ router.post('/whatsapp', express.json(), async (req, res) => {
         nome: lead.nome,
         telefone: telefoneLead,
         contexto: `Horário confirmado com o lead: ${resultado.resumoParaConsultor || resultado.resposta}\nAtendimento automático encerrado - adicione na sua agenda.`,
-      }));
+      }), conexao);
     } else if (resultado.encaminharHumano) {
       upsertLead(telefoneLead, { status: 'human_handoff', respostasAutomaticas });
       const contexto = resultado.resumoParaConsultor || resultado.motivo || 'a IA identificou que é hora de assumir';
@@ -202,7 +196,7 @@ router.post('/whatsapp', express.json(), async (req, res) => {
         nome: lead.nome,
         telefone: telefoneLead,
         contexto: `${contexto}\nÚltima mensagem do lead: "${textoRecebido}"`,
-      }));
+      }), conexao);
     } else {
       upsertLead(telefoneLead, { status: 'conversa_ia', respostasAutomaticas });
     }

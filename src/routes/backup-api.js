@@ -19,7 +19,7 @@ router.post('/pausa', (req, res) => {
 router.get('/backup', (req, res) => {
   const dados = exportarTudo();
   const data = new Date().toISOString().slice(0, 10);
-  res.setHeader('Content-Disposition', `attachment; filename="backup-fouragro-${data}.json"`);
+  res.setHeader('Content-Disposition', `attachment; filename="backup-${data}.json"`);
   res.setHeader('Content-Type', 'application/json');
   res.send(JSON.stringify(dados, null, 2));
 });

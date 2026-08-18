@@ -23,12 +23,10 @@
     <div class="topo">
       <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
       <div class="acoes">
+        <a class="botao secundario" href="#config">Configurações</a>
         <a class="botao secundario" href="#testar">Testar mensagem</a>
         <a class="botao secundario" href="#metricas">Métricas</a>
         <a class="botao secundario" href="#relatorio">Relatório diário</a>
-        <a class="botao secundario" href="#crm">CRM</a>
-        <a class="botao secundario" href="#agenda">Google Agenda</a>
-        <a class="botao secundario" href="#tom">Estilo das mensagens</a>
         <a class="botao secundario" href="#backup">Backup</a>
         <a class="botao secundario" href="#codigo">Código de acesso</a>
         <a class="botao" href="#novo">+ Novo lead</a>
@@ -76,17 +74,7 @@
             <input type="text" id="novo-telefone" placeholder="5555999999999" required>
             <p class="dica">Só números, com código do país e DDD.</p>
           </div>
-          <div class="campo">
-            <label for="novo-produto">Produto</label>
-            <select id="novo-produto" required>
-              <option value="">Selecione</option>
-              <option value="agro">Agro/rural</option>
-              <option value="imoveis">Imóveis</option>
-              <option value="caminhoes">Caminhões</option>
-              <option value="credito_empresarial">Crédito empresarial</option>
-            </select>
-          </div>
-          <button type="submit" class="botao claro">Adicionar à sequência</button>
+          <button type="submit" class="botao claro">Adicionar lead</button>
         </form>
       </div>
     </section>
@@ -102,8 +90,8 @@
 
       <div id="modo-whatsapp" style="display:none;">
         <p class="dica" style="margin: 0 0 20px;">
-          Cria um lead de teste (selo TESTE no painel) e manda a primeira mensagem
-          agora pro número que você informar. A partir daí, é só responder normalmente
+          Cria um lead de teste (selo TESTE no painel) e manda a mensagem de
+          abertura agora pro número que você informar. A partir daí, é só responder normalmente
           pelo seu WhatsApp — a conversa segue pelo caminho real.
         </p>
         <div class="cartao largo">
@@ -118,15 +106,6 @@
               <label for="wa-telefone">Seu WhatsApp (pra receber e responder)</label>
               <input type="text" id="wa-telefone" placeholder="5555999999999" required>
             </div>
-            <div class="campo">
-              <label for="wa-produto">Produto</label>
-              <select id="wa-produto">
-                <option value="agro">Agro/rural</option>
-                <option value="imoveis">Imóveis</option>
-                <option value="caminhoes">Caminhões</option>
-                <option value="credito_empresarial">Crédito empresarial</option>
-              </select>
-            </div>
             <button type="submit" class="botao claro" id="wa-btn">Iniciar teste no WhatsApp</button>
           </form>
         </div>
@@ -134,8 +113,8 @@
 
       <div id="modo-unica">
         <p class="dica" style="margin: 0 0 20px;">
-          Gera uma mensagem com a mesma IA e manda pro número informado. Não cria
-          lead nem entra na sequência automática.
+          Manda uma das mensagens cadastradas pro número informado, do jeito
+          exato que o cliente receberia. Não cria lead nem entra na esteira.
         </p>
         <div class="cartao largo">
           <div class="erro" id="erro"></div>
@@ -149,30 +128,10 @@
               <label for="telefone">Enviar a mensagem de teste para</label>
               <input type="text" id="telefone" placeholder="Seu WhatsApp, ex: 5555999999999" required>
             </div>
-            <div class="campo">
-              <label for="produto">Produto</label>
-              <select id="produto">
-                <option value="agro">Agro/rural</option>
-                <option value="imoveis">Imóveis</option>
-                <option value="caminhoes">Caminhões</option>
-                <option value="credito_empresarial">Crédito empresarial</option>
-              </select>
-            </div>
-            <div class="campo">
-              <label for="tentativa">Qual mensagem da sequência testar</label>
-              <select id="tentativa">
-                <option value="1">1ª tentativa (primeiro contato)</option>
-                <option value="2">2ª tentativa</option>
-                <option value="3">3ª tentativa</option>
-                <option value="4">4ª tentativa</option>
-                <option value="5">5ª tentativa</option>
-                <option value="6">6ª tentativa (última, fechamento)</option>
-              </select>
-            </div>
-            <button type="submit" class="botao claro" id="btn-enviar">Gerar e enviar mensagem de teste</button>
+            <button type="submit" class="botao claro" id="btn-enviar">Enviar mensagem de teste</button>
           </form>
           <div id="resultado" style="display:none; margin-top: 24px;">
-            <label>Mensagem gerada</label>
+            <label>Mensagem enviada</label>
             <div class="bolha ia" style="max-width: 100%;" id="texto-gerado"></div>
           </div>
         </div>
@@ -186,15 +145,6 @@
           <div class="campo">
             <label for="sim-nome">Nome do lead (fictício)</label>
             <input type="text" id="sim-nome" placeholder="Ex: João Teste">
-          </div>
-          <div class="campo">
-            <label for="sim-produto">Produto</label>
-            <select id="sim-produto">
-              <option value="agro">Agro/rural</option>
-              <option value="imoveis">Imóveis</option>
-              <option value="caminhoes">Caminhões</option>
-              <option value="credito_empresarial">Crédito empresarial</option>
-            </select>
           </div>
           <button class="botao claro" id="btn-iniciar-simulacao">Iniciar simulação</button>
           <div class="conversa" id="sim-conversa" style="margin-top: 24px;"></div>
@@ -242,32 +192,6 @@
       </div>
     </section>
 
-    <!-- VIEW: integração com o CRM -->
-    <section id="view-crm" class="view" style="display:none;">
-      <a class="voltar" href="#leads">← Voltar</a>
-      <div class="cartao largo">
-        <h2 style="margin-top:0;">Integração com o CRM</h2>
-        <p class="dica" style="margin-top:0;">
-          Guarda aqui a chave da API do RD Station (ou outro CRM) pra vincular
-          futuramente. Por enquanto só fica salva — nenhuma integração automática
-          usa isso ainda.
-        </p>
-        <div class="sucesso" id="crm-sucesso"></div>
-        <form id="form-crm">
-          <div class="campo">
-            <label for="crm-url">URL base da API (opcional)</label>
-            <input type="text" id="crm-url" placeholder="Ex: https://crm.rdstation.com/api/v1">
-          </div>
-          <div class="campo">
-            <label for="crm-chave">Chave da API</label>
-            <input type="password" id="crm-chave" placeholder="Cole a chave aqui">
-            <p class="dica" id="crm-status"></p>
-          </div>
-          <button type="submit" class="botao claro">Salvar</button>
-        </form>
-      </div>
-    </section>
-
     <!-- VIEW: relatório diário -->
     <section id="view-relatorio" class="view" style="display:none;">
       <a class="voltar" href="#leads">← Voltar</a>
@@ -295,42 +219,131 @@
       </div>
     </section>
 
-    <!-- VIEW: Google Agenda (preparação, ainda não conecta de verdade) -->
-    <section id="view-agenda" class="view" style="display:none;">
+    <!-- VIEW: configurações (identidade, mensagens, regras, horários) -->
+    <section id="view-config" class="view" style="display:none;">
       <a class="voltar" href="#leads">← Voltar</a>
-      <div class="cartao largo">
-        <h2 style="margin-top:0;">Google Agenda</h2>
-        <p class="dica" style="margin-top:0;">
-          Ainda não conecta de verdade — conectar o Google Agenda exige um
-          fluxo de autorização à parte (login com sua conta Google). Isso
-          marca que você quer essa conexão, pra ativarmos quando for construída.
-        </p>
-        <div class="sucesso" id="agenda-sucesso"></div>
-        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-          <input type="checkbox" id="agenda-querconectar" style="width:auto;">
-          Quero conectar meu Google Agenda automaticamente no futuro
-        </label>
-        <button class="botao claro" id="btn-salvar-agenda" style="margin-top:20px;">Salvar</button>
+      <div class="abas" id="abas-config">
+        <button class="aba ativa" data-painel="identidade">Identidade</button>
+        <button class="aba" data-painel="whatsapps">WhatsApps</button>
+        <button class="aba" data-painel="mensagens">Mensagens</button>
+        <button class="aba" data-painel="regras">Regras</button>
+        <button class="aba" data-painel="horarios">Horários</button>
       </div>
-    </section>
 
-    <!-- VIEW: estilo das mensagens (exemplos de tom) -->
-    <section id="view-tom" class="view" style="display:none;">
-      <a class="voltar" href="#leads">← Voltar</a>
       <div class="cartao largo">
-        <h2 style="margin-top:0;">Estilo das mensagens</h2>
-        <p class="dica" style="margin-top:0;">
-          Cole aqui mensagens reais que você já mandou pra leads — uma por
-          caixa. Quanto mais exemplos, mais a IA escreve parecido com você.
-          Não precisa ser perfeito nem recente, só precisa ser seu jeito
-          natural de escrever.
-        </p>
-        <div class="sucesso" id="tom-sucesso"></div>
-        <div id="tom-lista"></div>
-        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
-          <button class="botao secundario" id="btn-add-exemplo">+ Adicionar exemplo</button>
-          <button class="botao claro" id="btn-salvar-tom">Salvar</button>
+        <div class="sucesso" id="cfg-sucesso"></div>
+        <div class="erro" id="cfg-erro"></div>
+
+        <div class="painel-config" id="config-identidade">
+          <p class="dica" style="margin-top:0;">
+            A IA escreve sempre em primeira pessoa, como se fosse você digitando —
+            nunca como assistente ou robô falando em seu nome. É esse nome que
+            ela usa pra se apresentar.
+          </p>
+          <div class="campo">
+            <label for="cfg-nome">Seu nome</label>
+            <input type="text" id="cfg-nome" placeholder="Como você se apresenta">
+          </div>
+          <div class="campo">
+            <label for="cfg-empresa">Empresa</label>
+            <input type="text" id="cfg-empresa" placeholder="Empresa que você cita ao se apresentar">
+          </div>
+          <div class="campo">
+            <label for="cfg-contexto">O que você faz</label>
+            <textarea id="cfg-contexto" rows="4" placeholder="Uma ou duas linhas sobre o que você oferece. A IA só pode falar do que estiver escrito aqui — o que não estiver, ela não inventa."></textarea>
+          </div>
         </div>
+
+        <div class="painel-config" id="config-whatsapps" style="display:none;">
+          <p class="dica" style="margin-top:0;">
+            Os números que disparam as mensagens. Ter dois ou três divide o volume
+            entre eles — e é volume <strong>por número</strong>, não volume total, que
+            faz o WhatsApp bloquear. Cada lead fica grudado no número que abriu a
+            conversa dele, do começo ao fim.
+          </p>
+          <p class="dica">
+            Deixe <strong>Nome nas mensagens</strong> e <strong>Avisos vão para</strong> em branco
+            se todos os números forem seus. Preencha só se cada número for de uma
+            pessoa diferente — aí a IA se apresenta com o nome de cada um e os avisos
+            vão pro dono do número.
+          </p>
+          <div id="cfg-whatsapps"></div>
+          <button type="button" class="botao secundario" id="btn-add-whatsapp" style="margin-top:16px;">+ Adicionar número</button>
+        </div>
+
+        <div class="painel-config" id="config-mensagens" style="display:none;">
+          <p class="dica" style="margin-top:0;">
+            A mensagem de abertura que o cliente recebe. Escreva quantas quiser:
+            cada lead recebe uma delas, sorteada — mandar o texto idêntico pra
+            centenas de números é justamente o padrão que o WhatsApp trata como
+            spam. Use <strong>{nome}</strong> onde quiser o primeiro nome da pessoa.
+          </p>
+          <div id="cfg-mensagens"></div>
+          <button type="button" class="botao secundario" id="btn-add-mensagem" style="margin-top:16px;">+ Adicionar mensagem</button>
+        </div>
+
+        <div class="painel-config" id="config-regras" style="display:none;">
+          <p class="dica" style="margin-top:0;">
+            O que a IA pode e não pode fazer quando o cliente responder. Uma regra
+            por caixa, escrita do jeito que você falaria — por exemplo: "nunca
+            informe preço por mensagem" ou "se perguntarem sobre prazo, me passe a
+            conversa". Ela segue todas, sem exceção.
+          </p>
+          <div id="cfg-regras"></div>
+          <button type="button" class="botao secundario" id="btn-add-regra" style="margin-top:16px;">+ Adicionar regra</button>
+        </div>
+
+        <div class="painel-config" id="config-horarios" style="display:none;">
+          <p class="dica" style="margin-top:0;">
+            Nenhuma mensagem sai fora dessa janela (horário de Brasília).
+          </p>
+          <div class="campo">
+            <label for="cfg-hora-inicio">Começa a enviar às</label>
+            <input type="number" id="cfg-hora-inicio" min="0" max="23">
+          </div>
+          <div class="campo">
+            <label for="cfg-hora-fim">Para de enviar às</label>
+            <input type="number" id="cfg-hora-fim" min="0" max="23">
+          </div>
+          <p class="dica">
+            Quando um lead entra, a mensagem dele não sai na hora — sai num momento
+            sorteado dentro da faixa abaixo. Faixa mais larga espalha mais os
+            disparos e tira a cara de robô. Se você importa planilhas grandes de
+            uma vez, vale aumentar bastante o máximo.
+          </p>
+          <div class="campo">
+            <label for="cfg-atraso-min">Espera mínima, em minutos</label>
+            <input type="number" id="cfg-atraso-min" min="0" max="1440">
+          </div>
+          <div class="campo">
+            <label for="cfg-atraso-max">Espera máxima, em minutos</label>
+            <input type="number" id="cfg-atraso-max" min="0" max="1440">
+          </div>
+          <p class="dica">
+            E quando chega a hora de vários leads ao mesmo tempo, as mensagens
+            não saem emendadas: o sistema dá uma pausa entre uma e outra. É o que
+            evita que uma planilha grande vire uma rajada de disparos — o padrão
+            que mais derruba número no WhatsApp.
+          </p>
+          <div class="campo">
+            <label for="cfg-intervalo-min">Pausa mínima entre envios, em segundos</label>
+            <input type="number" id="cfg-intervalo-min" min="0" max="3600">
+          </div>
+          <div class="campo">
+            <label for="cfg-intervalo-max">Pausa máxima entre envios, em segundos</label>
+            <input type="number" id="cfg-intervalo-max" min="0" max="3600">
+          </div>
+          <div class="campo">
+            <label for="cfg-max-respostas">Máximo de respostas automáticas seguidas</label>
+            <input type="number" id="cfg-max-respostas" min="1" max="50">
+            <p class="dica">
+              Depois desse número de respostas seguidas, a IA para e passa a conversa
+              pra você, mesmo que ainda não tenha marcado horário nenhum.
+            </p>
+          </div>
+        </div>
+
+        <button type="button" class="botao claro" id="btn-salvar-config" style="margin-top:24px;">Salvar</button>
       </div>
     </section>
 
