@@ -7,6 +7,38 @@ const LABELS_STATUS = {
   cold_nurture: 'Nutrição futura',
   encerrado: 'Encerrado',
 };
+
+// Dado que veio de fora (nome escolhido pelo lead no WhatsApp, texto de
+// mensagem, erro devolvido pela Z-API) NUNCA entra em innerHTML cru: um
+// nome com HTML dentro rodaria no navegador de quem abre o painel. Esta
+// escapa pra conteudo ENTRE tags; escaparAtributo() e a versao pra dentro
+// de aspas de atributo.
+function escaparTexto(valor) {
+  return (valor === null || valor === undefined ? '' : String(valor))
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Timers do QR Code da tela de Configurações > WhatsApps, por número. Ficam
+// aqui no topo porque o roteamento precisa pará-los ao sair da tela e ele
+// roda antes do resto do arquivo.
+const conexoesAtivas = new Map();
+
+function pararConexao(id) {
+  const timers = conexoesAtivas.get(id);
+  if (!timers) return;
+  clearInterval(timers.qr);
+  clearInterval(timers.status);
+  conexoesAtivas.delete(id);
+}
+
+function pararTodasAsConexoes() {
+  [...conexoesAtivas.keys()].forEach(pararConexao);
+}
+
 // ===== Chamadas autenticadas =====
 // Todas as rotas de dados exigem o token de sessão que o servidor entrega
 // quando o código de acesso é digitado certo. Se a sessão expirar (12h),
@@ -73,6 +105,10 @@ function rotear() {
   const hash = location.hash.replace('#', '');
   const [view, param] = hash.split('/');
 
+  // Os timers do QR Code continuariam chamando a Z-API em segundo plano
+  // depois que a tela de configuracoes sai de vista - param aqui.
+  pararTodasAsConexoes();
+
   if (view === 'lead' && param) {
     mostrarView('lead');
     carregarDetalheLead(param);
@@ -120,11 +156,62 @@ function colunaDoLead(lead) {
 
 let todosOsLeads = [];
 
+// De qual numero saiu cada lead. O lead guarda so o whatsappId; o apelido
+// (que e o que interessa na tela) mora na configuracao. Busca uma vez e
+// guarda - o quadro se redesenha a cada 30s e nao vale refazer essa chamada
+// junto. O cache e atualizado ao salvar a configuracao, entao renomear um
+// numero reflete aqui sem recarregar a pagina.
+let whatsappsConhecidos = null;
+
+async function garantirWhatsappsConhecidos() {
+  if (whatsappsConhecidos) return whatsappsConhecidos;
+  try {
+    const resp = await api('/api/config');
+    const cfg = await resp.json();
+    whatsappsConhecidos = (cfg.whatsapps || []).map((w) => ({ id: w.id, apelido: w.apelido || w.id }));
+  } catch (erro) {
+    // Sem os apelidos o quadro ainda funciona - so nao mostra a etiqueta.
+    // O cache fica vazio de proposito: assim a proxima atualizacao do
+    // quadro (30s) tenta de novo, em vez de ficar sem etiqueta pra sempre.
+    return [];
+  }
+  return whatsappsConhecidos;
+}
+
+function apelidoDoWhatsapp(id) {
+  if (!id) return null;
+  const encontrado = (whatsappsConhecidos || []).find((w) => w.id === id);
+  // Numero removido depois que o lead ja tinha sido distribuido pra ele:
+  // melhor dizer isso do que sumir com a etiqueta ou mostrar o id cru.
+  return encontrado ? encontrado.apelido : 'Número removido';
+}
+
+// O <select> so aparece com dois ou mais numeros cadastrados - com um (ou
+// nenhum) ele nao filtra nada.
+function atualizarFiltroDeWhatsapp() {
+  const filtro = document.getElementById('filtro-whatsapp');
+  const numeros = whatsappsConhecidos || [];
+  if (numeros.length < 2) {
+    filtro.style.display = 'none';
+    filtro.value = '';
+    return;
+  }
+  const selecionado = filtro.value;
+  filtro.innerHTML = '<option value="">Todos os números</option>' +
+    numeros.map((w) => `<option value="${escaparAtributo(w.id)}">${escaparTexto(w.apelido)}</option>`).join('');
+  // Preserva a escolha entre as atualizacoes automaticas do quadro; se o
+  // numero escolhido sumiu da configuracao, volta pra "Todos".
+  filtro.value = numeros.some((w) => w.id === selecionado) ? selecionado : '';
+  filtro.style.display = 'block';
+}
+
 async function carregarLeads() {
   const quadro = document.getElementById('quadro');
   try {
+    await garantirWhatsappsConhecidos();
     const resp = await api('/api/leads');
     todosOsLeads = await resp.json();
+    atualizarFiltroDeWhatsapp();
     renderizarQuadro();
     atualizarEstadoPausa();
   } catch (erro) {
@@ -136,18 +223,21 @@ function renderizarQuadro() {
   const quadro = document.getElementById('quadro');
   const termoCru = (document.getElementById('busca-telefone').value || '').trim().toLowerCase();
   const termoDigitos = termoCru.replace(/\D/g, '');
-  const leads = termoCru
+  const whatsappEscolhido = document.getElementById('filtro-whatsapp').value;
+
+  let leads = termoCru
     ? todosOsLeads.filter((l) =>
         (termoDigitos && l.phone.includes(termoDigitos)) ||
         (l.nome || '').toLowerCase().includes(termoCru))
     : todosOsLeads;
+  if (whatsappEscolhido) leads = leads.filter((l) => l.whatsappId === whatsappEscolhido);
 
   if (!todosOsLeads.length) {
     quadro.innerHTML = '<div class="vazio">Nenhum lead ainda. Adicione o primeiro depois de uma ligação sem retorno.</div>';
     return;
   }
-  if (termoBusca && !leads.length) {
-    quadro.innerHTML = '<div class="vazio">Nenhum lead encontrado com esse número.</div>';
+  if ((termoCru || whatsappEscolhido) && !leads.length) {
+    quadro.innerHTML = '<div class="vazio">Nenhum lead encontrado com esse filtro.</div>';
     return;
   }
 
@@ -157,12 +247,16 @@ function renderizarQuadro() {
       <div class="coluna">
         <div class="coluna-titulo"><span>${coluna.titulo}</span><span>${cartoes.length}</span></div>
         <div class="coluna-cartoes">
-          ${cartoes.length ? cartoes.map((lead) => `
+          ${cartoes.length ? cartoes.map((lead) => {
+            const apelido = apelidoDoWhatsapp(lead.whatsappId);
+            return `
             <a class="cartao-lead" href="#lead/${encodeURIComponent(lead.phone)}">
-              <span class="nome">${lead.nome || '—'}${lead.teste ? '<span class="selo-teste">TESTE</span>' : ''}</span>
-              <span class="telefone">${lead.phone}</span>
+              <span class="nome">${escaparTexto(lead.nome || '—')}${lead.teste ? '<span class="selo-teste">TESTE</span>' : ''}</span>
+              <span class="telefone">${escaparTexto(lead.phone)}</span>
+              ${apelido ? `<span class="etiqueta-whatsapp">${escaparTexto(apelido)}</span>` : ''}
             </a>
-          `).join('') : '<p style="font-size:12px; color:var(--texto-fraco); padding:6px 4px;">Vazio</p>'}
+          `;
+          }).join('') : '<p style="font-size:12px; color:var(--texto-fraco); padding:6px 4px;">Vazio</p>'}
         </div>
       </div>
     `;
@@ -170,6 +264,7 @@ function renderizarQuadro() {
 }
 
 document.getElementById('busca-telefone').addEventListener('input', renderizarQuadro);
+document.getElementById('filtro-whatsapp').addEventListener('change', renderizarQuadro);
 
 // O quadro se atualiza sozinho a cada 30s enquanto estiver aberto, pra
 // refletir mensagens que sairam ou leads que responderam nesse meio tempo.
@@ -729,10 +824,32 @@ function valoresDosWhatsapps() {
   }));
 }
 
+// Bloco de conexão de um número: status, QR Code e os botões. O "id" é o do
+// número cadastrado, ou "padrao" pra quem usa as variáveis de ambiente.
+function blocoDeConexao(id) {
+  return `
+    <div class="wa-conexao" data-conexao="${escaparAtributo(id)}">
+      <span class="wa-status">Verificando conexão…</span>
+      <div class="wa-conexao-acoes">
+        <button type="button" class="botao secundario wa-btn-conectar">Conectar</button>
+        <button type="button" class="botao secundario wa-btn-desconectar" style="display:none;">Desconectar</button>
+        <button type="button" class="botao secundario wa-btn-cancelar" style="display:none;">Cancelar</button>
+      </div>
+      <div class="wa-qr" style="display:none;"></div>
+    </div>
+  `;
+}
+
 function renderizarWhatsapps(lista) {
   const alvo = document.getElementById('cfg-whatsapps');
+  // O re-render joga fora o HTML do QR Code; deixar os timers rodando
+  // faria eles escreverem num elemento que não existe mais.
+  pararTodasAsConexoes();
+
   if (!lista.length) {
-    alvo.innerHTML = '<p class="dica">Nenhum número cadastrado — o sistema está usando as credenciais das variáveis de ambiente, ou seja, um número só.</p>';
+    alvo.innerHTML = '<p class="dica">Nenhum número cadastrado — o sistema está usando as credenciais das variáveis de ambiente, ou seja, um número só.</p>'
+      + blocoDeConexao('padrao');
+    verificarStatusDosCartoes();
     return;
   }
   alvo.innerHTML = lista.map((w, i) => `
@@ -768,9 +885,138 @@ function renderizarWhatsapps(lista) {
       ${w.id
         ? `<p class="dica">Webhook desse número — cole na Z-API em "ao receber mensagem":<br><code style="word-break:break-all;">${location.origin}/webhooks/whatsapp/${w.id}</code></p>`
         : '<p class="dica">Salve pra gerar a URL de webhook desse número.</p>'}
+      ${w.id
+        ? blocoDeConexao(w.id)
+        : '<p class="dica">Salve o número pra poder conectar o WhatsApp por aqui.</p>'}
       <button type="button" class="botao secundario btn-remover-whatsapp" data-indice="${i}">Remover número</button>
     </div>
   `).join('');
+
+  verificarStatusDosCartoes();
+}
+
+// --- Conectar/desconectar pela própria tela ---
+// O WhatsApp invalida o QR Code a cada ~20s, então a tela busca um novo
+// nesse ritmo enquanto não conectar. O status é conferido em paralelo, num
+// intervalo mais curto, pra fechar o QR sozinho assim que a leitura der
+// certo. As tentativas são limitadas: sem isso, uma aba esquecida aberta
+// ficaria batendo na Z-API pra sempre.
+const INTERVALO_QR_MS = 20000;
+const INTERVALO_STATUS_MS = 5000;
+const MAX_TENTATIVAS_QR = 12; // ~4 minutos
+
+function blocoDaConexao(id) {
+  return document.querySelector(`.wa-conexao[data-conexao="${id}"]`);
+}
+
+function mostrarStatus(bloco, { conectado, motivo }) {
+  const rotulo = bloco.querySelector('.wa-status');
+  rotulo.classList.toggle('conectado', Boolean(conectado));
+  rotulo.textContent = conectado
+    ? 'Conectado'
+    : `Desconectado${motivo ? ' — ' + motivo : ''}`;
+  bloco.querySelector('.wa-btn-conectar').style.display = conectado ? 'none' : 'inline-flex';
+  bloco.querySelector('.wa-btn-desconectar').style.display = conectado ? 'inline-flex' : 'none';
+}
+
+async function atualizarStatusConexao(id) {
+  const bloco = blocoDaConexao(id);
+  if (!bloco) return null;
+  try {
+    const resp = await api(`/api/whatsapps/${encodeURIComponent(id)}/status`);
+    const dados = await resp.json();
+    if (!resp.ok) throw new Error(dados.erro || 'falha ao consultar o status');
+    mostrarStatus(bloco, dados);
+    return dados;
+  } catch (erro) {
+    bloco.querySelector('.wa-status').textContent = `Não consegui verificar: ${erro.message}`;
+    return null;
+  }
+}
+
+function verificarStatusDosCartoes() {
+  document.querySelectorAll('.wa-conexao').forEach((bloco) => {
+    atualizarStatusConexao(bloco.dataset.conexao);
+  });
+}
+
+function encerrarTelaDeQrCode(id) {
+  pararConexao(id);
+  const bloco = blocoDaConexao(id);
+  if (!bloco) return;
+  const qr = bloco.querySelector('.wa-qr');
+  qr.style.display = 'none';
+  qr.innerHTML = '';
+  bloco.querySelector('.wa-btn-cancelar').style.display = 'none';
+}
+
+async function conectarWhatsapp(id) {
+  pararConexao(id);
+  const bloco = blocoDaConexao(id);
+  if (!bloco) return;
+  const qr = bloco.querySelector('.wa-qr');
+  qr.style.display = 'block';
+  qr.innerHTML = '<p class="dica">Gerando o QR Code…</p>';
+  bloco.querySelector('.wa-btn-cancelar').style.display = 'inline-flex';
+
+  let tentativas = 0;
+
+  const buscarQrCode = async () => {
+    if (tentativas >= MAX_TENTATIVAS_QR) {
+      pararConexao(id);
+      qr.innerHTML = '<p class="dica">Tempo esgotado sem conectar. Clique em Conectar pra tentar de novo.</p>';
+      return;
+    }
+    tentativas += 1;
+    try {
+      const resp = await api(`/api/whatsapps/${encodeURIComponent(id)}/qrcode`);
+      const dados = await resp.json();
+      if (!resp.ok) throw new Error(dados.erro || 'falha ao gerar o QR Code');
+      if (dados.conectado) {
+        encerrarTelaDeQrCode(id);
+        await atualizarStatusConexao(id);
+        return;
+      }
+      // A imagem vem em base64 da Z-API. Aceitar só data: URI de imagem
+      // evita que um valor inesperado vire outra coisa dentro do src.
+      const imagem = dados.imagem || '';
+      if (!imagem.startsWith('data:image/')) {
+        qr.innerHTML = '<p class="dica">A Z-API não devolveu o QR Code agora. Tentando de novo em instantes…</p>';
+        return;
+      }
+      qr.innerHTML = `
+        <img src="${escaparAtributo(imagem)}" alt="QR Code do WhatsApp">
+        <p class="dica">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho. O código se renova sozinho a cada 20 segundos.</p>
+      `;
+    } catch (erro) {
+      qr.innerHTML = `<p class="dica">Não consegui pegar o QR Code: ${escaparTexto(erro.message)}</p>`;
+    }
+  };
+
+  conexoesAtivas.set(id, {
+    qr: setInterval(buscarQrCode, INTERVALO_QR_MS),
+    status: setInterval(async () => {
+      const situacao = await atualizarStatusConexao(id);
+      if (situacao && situacao.conectado) encerrarTelaDeQrCode(id);
+    }, INTERVALO_STATUS_MS),
+  });
+
+  buscarQrCode();
+}
+
+async function desconectarWhatsapp(id) {
+  if (!confirm('Desconectar esse número do WhatsApp? Nenhuma mensagem entra ou sai por ele até você conectar de novo.')) return;
+  const bloco = blocoDaConexao(id);
+  encerrarTelaDeQrCode(id);
+  try {
+    const resp = await api(`/api/whatsapps/${encodeURIComponent(id)}/desconectar`, { method: 'POST' });
+    const dados = await resp.json();
+    if (!resp.ok) throw new Error(dados.erro || 'falha ao desconectar');
+  } catch (erro) {
+    if (bloco) bloco.querySelector('.wa-status').textContent = `Não consegui desconectar: ${erro.message}`;
+    return;
+  }
+  atualizarStatusConexao(id);
 }
 
 document.getElementById('btn-add-whatsapp').addEventListener('click', () => {
@@ -787,6 +1033,8 @@ async function carregarConfig() {
   document.getElementById('cfg-nome').value = cfg.identidade.nome || '';
   document.getElementById('cfg-empresa').value = cfg.identidade.empresa || '';
   document.getElementById('cfg-contexto').value = cfg.identidade.contexto || '';
+
+  whatsappsConhecidos = (cfg.whatsapps || []).map((w) => ({ id: w.id, apelido: w.apelido || w.id }));
 
   renderizarWhatsapps(cfg.whatsapps || []);
   renderizarLista('cfg-mensagem', cfg.mensagens);
@@ -822,6 +1070,15 @@ document.getElementById('btn-add-regra').addEventListener('click', () => {
 // Os botões "Remover" nascem junto com os itens, então o clique é escutado
 // no container - assim continua funcionando depois de cada re-render.
 document.getElementById('view-config').addEventListener('click', (evento) => {
+  const acaoDeConexao = evento.target.closest('.wa-btn-conectar, .wa-btn-desconectar, .wa-btn-cancelar');
+  if (acaoDeConexao) {
+    const id = acaoDeConexao.closest('.wa-conexao').dataset.conexao;
+    if (acaoDeConexao.classList.contains('wa-btn-conectar')) conectarWhatsapp(id);
+    else if (acaoDeConexao.classList.contains('wa-btn-desconectar')) desconectarWhatsapp(id);
+    else encerrarTelaDeQrCode(id);
+    return;
+  }
+
   const remocaoDeNumero = evento.target.closest('.btn-remover-whatsapp');
   if (remocaoDeNumero) {
     const indice = Number(remocaoDeNumero.dataset.indice);
@@ -877,6 +1134,8 @@ document.getElementById('btn-salvar-config').addEventListener('click', async () 
     renderizarWhatsapps(dados.whatsapps || []);
     renderizarLista('cfg-mensagem', dados.mensagens);
     renderizarLista('cfg-regra', dados.regras);
+    // Renomear um número precisa aparecer no quadro sem recarregar a página.
+    whatsappsConhecidos = (dados.whatsapps || []).map((w) => ({ id: w.id, apelido: w.apelido || w.id }));
     sucesso.textContent = `Salvo — ${(dados.whatsapps || []).filter((w) => w.ativo).length} número(s) ativo(s), ${dados.mensagens.length} mensagem(ns) e ${dados.regras.length} regra(s).`;
     sucesso.style.display = 'block';
     setTimeout(() => { sucesso.style.display = 'none'; }, 3000);

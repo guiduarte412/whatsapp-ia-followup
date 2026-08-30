@@ -397,6 +397,48 @@ h2 {
   font-size: 24px;
 }
 
+/* De qual número saiu o lead - discreto, só pra bater o olho e saber. */
+.etiqueta-whatsapp {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--laranja);
+  border: 1px solid rgba(232,115,74,0.5);
+  background: rgba(232,115,74,0.12);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+/* --- Conexão do WhatsApp (QR Code na tela de Configurações) --- */
+
+.wa-conexao {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+}
+
+.wa-status {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--texto-fraco);
+  margin-bottom: 10px;
+}
+.wa-status.conectado { color: var(--laranja); }
+
+.wa-conexao-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.wa-qr { margin-top: 14px; text-align: center; }
+.wa-qr img {
+  width: 240px;
+  max-width: 100%;
+  background: #fff;
+  padding: 8px;
+  border-radius: 6px;
+}
+
 .selo-teste {
   font-family: var(--font-mono);
   font-size: 10px;

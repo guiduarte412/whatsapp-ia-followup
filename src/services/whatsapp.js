@@ -44,6 +44,42 @@ async function enviarMensagem(telefone, mensagem, conexao) {
   }
 }
 
+// Chamadas de gerenciamento da instancia (status, QR Code, desconectar).
+// O timeout importa aqui: essas rotas alimentam a tela de Configuracoes, e
+// uma Z-API lenta nao pode segurar o painel pendurado.
+const TIMEOUT_GERENCIAMENTO_MS = 15000;
+
+async function chamadaDeGerenciamento(caminho, conexao) {
+  const { instanceId, token, clientToken } = credenciais(conexao);
+  try {
+    const resposta = await axios.get(
+      `https://api.z-api.io/instances/${instanceId}/token/${token}/${caminho}`,
+      { headers: { 'Client-Token': clientToken }, timeout: TIMEOUT_GERENCIAMENTO_MS }
+    );
+    return resposta.data;
+  } catch (erro) {
+    const detalhe = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+    const qual = conexao && conexao.apelido ? ` (${conexao.apelido})` : '';
+    throw new Error(`Z-API${qual}: ${detalhe}`);
+  }
+}
+
+// Devolve { connected, error, smartphoneConnected, ... } - o "error" e o
+// motivo real quando desconectado (ex: "You are not connected").
+function statusConexao(conexao) {
+  return chamadaDeGerenciamento('status', conexao);
+}
+
+// Devolve { value } com a imagem do QR Code em base64. So funciona com a
+// instancia DESCONECTADA - conectada, a Z-API nao gera QR Code.
+function obterQrCode(conexao) {
+  return chamadaDeGerenciamento('qr-code/image', conexao);
+}
+
+function desconectar(conexao) {
+  return chamadaDeGerenciamento('disconnect', conexao);
+}
+
 // Aviso interno. Vai pro numero de quem cuida daquela conexao, se ele foi
 // informado no cadastro; senao pro CONSULTOR_WHATSAPP das variaveis de
 // ambiente. Sai pela propria conexao envolvida, entao com varios numeros os
@@ -70,4 +106,11 @@ function formatarAvisoLead({ nome, telefone, contexto }) {
   return `Lead: ${nome || 'sem nome'}\nNúmero: ${telefone}\nHorário: ${horario}\n\n${contexto}`;
 }
 
-module.exports = { enviarMensagem, avisarConsultor, formatarAvisoLead };
+module.exports = {
+  enviarMensagem,
+  avisarConsultor,
+  formatarAvisoLead,
+  statusConexao,
+  obterQrCode,
+  desconectar,
+};

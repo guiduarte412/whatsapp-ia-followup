@@ -1,5 +1,6 @@
 const express = require('express');
-const { getConfig, salvarConfig, normalizarTelefoneBR } = require('../db/store');
+const { getConfig, salvarConfig, normalizarTelefoneBR, getWhatsappPorId } = require('../db/store');
+const { statusConexao, obterQrCode, desconectar } = require('../services/whatsapp');
 
 const router = express.Router();
 router.use(express.json({ limit: '1mb' }));
@@ -179,6 +180,59 @@ router.put('/config', (req, res) => {
   }
 
   res.json(paraATela(salvarConfig(parcial)));
+});
+
+// --- Conexao dos numeros (status / QR Code / desconectar) ---
+// O :id e o id de um numero cadastrado, ou a palavra "padrao" pra quem usa
+// as credenciais das variaveis de ambiente (modo de um numero so).
+
+function conexaoDoParametro(id) {
+  if (id === 'padrao') {
+    // "padrao" so existe de fato se as variaveis de ambiente estiverem la -
+    // sem elas, a chamada iria pra Z-API com "undefined" na URL.
+    if (!process.env.ZAPI_INSTANCE_ID || !process.env.ZAPI_TOKEN) return { naoExiste: true };
+    return { conexao: null };
+  }
+  const conexao = getWhatsappPorId(id);
+  if (!conexao) return { naoExiste: true };
+  return { conexao };
+}
+
+router.get('/whatsapps/:id/status', async (req, res) => {
+  const { conexao, naoExiste } = conexaoDoParametro(req.params.id);
+  if (naoExiste) return res.status(404).json({ erro: 'número não encontrado' });
+  try {
+    const status = await statusConexao(conexao);
+    res.json({ conectado: Boolean(status && status.connected), motivo: (status && status.error) || null });
+  } catch (erro) {
+    res.status(502).json({ erro: erro.message });
+  }
+});
+
+router.get('/whatsapps/:id/qrcode', async (req, res) => {
+  const { conexao, naoExiste } = conexaoDoParametro(req.params.id);
+  if (naoExiste) return res.status(404).json({ erro: 'número não encontrado' });
+  try {
+    // Conectada, a Z-API nao devolve QR Code nenhum - checar antes evita a
+    // tela ficar esperando uma imagem que nunca vem.
+    const status = await statusConexao(conexao);
+    if (status && status.connected) return res.json({ conectado: true, imagem: null });
+    const qr = await obterQrCode(conexao);
+    res.json({ conectado: false, imagem: (qr && qr.value) || null });
+  } catch (erro) {
+    res.status(502).json({ erro: erro.message });
+  }
+});
+
+router.post('/whatsapps/:id/desconectar', async (req, res) => {
+  const { conexao, naoExiste } = conexaoDoParametro(req.params.id);
+  if (naoExiste) return res.status(404).json({ erro: 'número não encontrado' });
+  try {
+    await desconectar(conexao);
+    res.json({ ok: true });
+  } catch (erro) {
+    res.status(502).json({ erro: erro.message });
+  }
 });
 
 module.exports = router;
