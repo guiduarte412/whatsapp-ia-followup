@@ -231,6 +231,7 @@
         <button class="aba" data-painel="mensagens">Mensagens</button>
         <button class="aba" data-painel="regras">Regras</button>
         <button class="aba" data-painel="horarios">Horários</button>
+        <button class="aba" data-painel="bloqueios">Bloqueios</button>
       </div>
 
       <div class="cartao largo">
@@ -344,6 +345,34 @@
               pra você, mesmo que ainda não tenha marcado horário nenhum.
             </p>
           </div>
+        </div>
+
+        <div class="painel-config" id="config-bloqueios" style="display:none;">
+          <p class="dica" style="margin-top:0;">
+            Números que pediram pra não receber mais mensagens. Um número aqui não recebe
+            nada por nenhum caminho: não entra na esteira, não recebe resposta da IA e não
+            volta nem se aparecer de novo numa planilha importada.
+          </p>
+          <p class="dica">
+            O sistema adiciona sozinho quando a pessoa pede pelo WhatsApp. Use o campo abaixo
+            quando o pedido vier por outro canal — ligação, e-mail, pessoalmente.
+            <strong>Nesta aba as ações valem na hora</strong>, sem precisar do botão Salvar.
+          </p>
+
+          <div class="sucesso" id="bloq-sucesso"></div>
+          <div class="erro" id="bloq-erro"></div>
+
+          <div class="campo">
+            <label for="bloq-telefone">Bloquear um número</label>
+            <input type="text" id="bloq-telefone" placeholder="DDD + número, ex: 47988887777">
+          </div>
+          <div class="campo">
+            <label for="bloq-motivo">Motivo (opcional)</label>
+            <input type="text" id="bloq-motivo" placeholder="Ex: pediu por telefone">
+          </div>
+          <button type="button" class="botao secundario" id="btn-bloquear-numero">Bloquear número</button>
+
+          <div id="cfg-bloqueados" style="margin-top:28px;"></div>
         </div>
 
         <button type="button" class="botao claro" id="btn-salvar-config" style="margin-top:24px;">Salvar</button>

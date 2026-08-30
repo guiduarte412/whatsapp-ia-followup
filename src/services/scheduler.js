@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { getActiveSequenceLeads, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, getWhatsappPorId } = require('../db/store');
+const { getActiveSequenceLeads, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, getWhatsappPorId, numeroEstaBloqueado } = require('../db/store');
 const { enviarMensagem, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
 
 // A esteira tem UMA mensagem so. O texto dela e sorteado entre as mensagens
@@ -64,6 +64,20 @@ async function aguardarAVezDoNumero(chave) {
 // Envia a mensagem de abertura. Devolve true se a mensagem realmente saiu -
 // e isso que diz ao ciclo se vale a pena esperar antes do proximo lead.
 async function processarLead(lead) {
+  // O lead pode ter sido bloqueado DEPOIS de entrar na fila - pediu pra
+  // parar respondendo a outra conversa, ou voce bloqueou na mao no painel.
+  // A mensagem dele ja esta agendada, entao sem essa checagem ela sairia
+  // assim mesmo, que e exatamente o que o bloqueio existe pra impedir.
+  if (numeroEstaBloqueado(lead.phone)) {
+    upsertLead(lead.phone, {
+      status: 'encerrado',
+      motivoEncerramento: 'optout',
+      proximoEnvioEm: null,
+    });
+    console.log(`Lead ${lead.phone} saiu da esteira sem receber nada - número bloqueado.`);
+    return false;
+  }
+
   const conexao = getWhatsappPorId(lead.whatsappId);
   const mensagem = montarMensagemDeAbertura(lead.nome);
 

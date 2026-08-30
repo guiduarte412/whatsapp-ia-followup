@@ -135,6 +135,7 @@ const COLUNAS_QUADRO = [
   { chave: 'aguardando', titulo: 'Aguardando você' },
   { chave: 'reuniao', titulo: 'Reunião agendada' },
   { chave: 'perdido', titulo: 'Lead perdido' },
+  { chave: 'optout', titulo: 'Pediu pra parar' },
   { chave: 'encerrado_manual', titulo: 'Encerrado' },
 ];
 
@@ -149,6 +150,10 @@ function colunaDoLead(lead) {
   if (lead.status === 'human_handoff') return 'aguardando';
   if (lead.status === 'cold_nurture') return 'perdido';
   if (lead.status === 'encerrado') {
+    // Quem pediu pra sair fica numa coluna própria: some da esteira, mas
+    // não some da sua vista - misturar com os encerrados normais esconderia
+    // justamente o que você precisa saber que aconteceu.
+    if (lead.motivoEncerramento === 'optout') return 'optout';
     return lead.motivoEncerramento === 'horario_confirmado' ? 'reuniao' : 'encerrado_manual';
   }
   return 'aguardando_envio';
@@ -340,6 +345,7 @@ inputArquivo.addEventListener('change', async (evento) => {
   msg.style.display = 'block';
   const partes = [`${resultado.criados} lead(s) importado(s)`];
   if (resultado.duplicados) partes.push(`${resultado.duplicados} já existia(m) e foi(ram) mantido(s) sem alteração`);
+  if (resultado.bloqueados) partes.push(`${resultado.bloqueados} pediram pra não receber e ficaram de fora`);
   if (resultado.erros?.length) partes.push(`${resultado.erros.length} linha(s) com erro (confira nome/telefone)`);
   msg.textContent = partes.join(' · ') + '.';
   inputArquivo.value = '';
@@ -1043,6 +1049,90 @@ document.getElementById('btn-add-whatsapp').addEventListener('click', () => {
   }]);
 });
 
+// --- Números bloqueados ---
+// Diferente do resto desta tela, aqui nada espera o botão Salvar: bloquear e
+// liberar valem na hora. Um pedido de "não me manda mais mensagem" que ficasse
+// pendente de um clique em Salvar não seria um bloqueio de verdade.
+
+function formatarTelefoneBonito(telefone) {
+  const d = (telefone || '').replace(/\D/g, '');
+  const semPais = d.startsWith('55') ? d.slice(2) : d;
+  if (semPais.length < 10) return telefone;
+  const ddd = semPais.slice(0, 2);
+  const resto = semPais.slice(2);
+  const meio = resto.length === 9 ? resto.slice(0, 5) : resto.slice(0, 4);
+  const fim = resto.length === 9 ? resto.slice(5) : resto.slice(4);
+  return `(${ddd}) ${meio}-${fim}`;
+}
+
+function renderizarBloqueados(lista) {
+  const alvo = document.getElementById('cfg-bloqueados');
+  if (!lista.length) {
+    alvo.innerHTML = '<p class="dica">Nenhum número bloqueado até agora.</p>';
+    return;
+  }
+  alvo.innerHTML = `
+    <div class="cabecalho-lista" style="grid-template-columns: 1.1fr 1fr 1.6fr auto;">
+      <span>Número</span><span>Quando</span><span>Motivo</span><span></span>
+    </div>
+    <div class="lista">
+      ${lista.map((b) => `
+        <div class="linha-lead" style="grid-template-columns: 1.1fr 1fr 1.6fr auto; cursor:default;">
+          <span class="telefone">${escaparTexto(formatarTelefoneBonito(b.telefone))}</span>
+          <span style="font-size:13px; color:var(--texto-fraco);">${escaparTexto(formatarHora(b.quando))}</span>
+          <span style="font-size:13px; color:var(--texto-fraco);">${escaparTexto(b.origem === 'pedido_do_lead' ? `pediu no WhatsApp: "${b.motivo}"` : (b.motivo || 'bloqueado no painel'))}</span>
+          <button type="button" class="botao secundario btn-liberar-numero" data-telefone="${escaparAtributo(b.telefone)}" style="padding:6px 12px; font-size:12px;">Liberar</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+async function carregarBloqueados() {
+  try {
+    const resp = await api('/api/bloqueados');
+    renderizarBloqueados(await resp.json());
+  } catch (erro) {
+    document.getElementById('cfg-bloqueados').innerHTML =
+      '<p class="dica">Não consegui carregar a lista de bloqueios agora.</p>';
+  }
+}
+
+function mensagemDeBloqueio(texto, ehErro) {
+  const sucesso = document.getElementById('bloq-sucesso');
+  const erro = document.getElementById('bloq-erro');
+  sucesso.style.display = 'none';
+  erro.style.display = 'none';
+  const alvo = ehErro ? erro : sucesso;
+  alvo.textContent = texto;
+  alvo.style.display = 'block';
+  if (!ehErro) setTimeout(() => { alvo.style.display = 'none'; }, 4000);
+}
+
+document.getElementById('btn-bloquear-numero').addEventListener('click', async () => {
+  const campoTelefone = document.getElementById('bloq-telefone');
+  const campoMotivo = document.getElementById('bloq-motivo');
+  const telefone = campoTelefone.value.trim();
+  if (!telefone) return mensagemDeBloqueio('Digite o número que você quer bloquear.', true);
+
+  try {
+    const resp = await api('/api/bloqueados', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefone, motivo: campoMotivo.value.trim() }),
+    });
+    const dados = await resp.json();
+    if (!resp.ok) return mensagemDeBloqueio(dados.erro || 'Não consegui bloquear esse número.', true);
+    campoTelefone.value = '';
+    campoMotivo.value = '';
+    mensagemDeBloqueio('Número bloqueado. Ele não recebe mais nenhuma mensagem do sistema.', false);
+    carregarBloqueados();
+    carregarLeads();
+  } catch (falha) {
+    mensagemDeBloqueio('Não consegui falar com o servidor agora.', true);
+  }
+});
+
 async function carregarConfig() {
   const resp = await api('/api/config');
   const cfg = await resp.json();
@@ -1064,6 +1154,8 @@ async function carregarConfig() {
   document.getElementById('cfg-intervalo-min').value = cfg.horarios.intervaloMinSegundos;
   document.getElementById('cfg-intervalo-max').value = cfg.horarios.intervaloMaxSegundos;
   document.getElementById('cfg-max-respostas').value = cfg.maxRespostasAutomaticas;
+
+  carregarBloqueados();
 }
 
 // Abas da tela de configuração (Identidade / Mensagens / Regras / Horários)
@@ -1073,6 +1165,10 @@ document.querySelectorAll('#abas-config .aba').forEach((aba) => {
     aba.classList.add('ativa');
     document.querySelectorAll('.painel-config').forEach((p) => { p.style.display = 'none'; });
     document.getElementById('config-' + aba.dataset.painel).style.display = 'block';
+    // Em Bloqueios nada passa pelo Salvar - deixar o botão à mostra ali só
+    // faria você clicar nele achando que o bloqueio dependia disso.
+    document.getElementById('btn-salvar-config').style.display =
+      aba.dataset.painel === 'bloqueios' ? 'none' : 'inline-flex';
   });
 });
 
@@ -1093,6 +1189,23 @@ document.getElementById('view-config').addEventListener('click', (evento) => {
     if (acaoDeConexao.classList.contains('wa-btn-conectar')) conectarWhatsapp(id);
     else if (acaoDeConexao.classList.contains('wa-btn-desconectar')) desconectarWhatsapp(id);
     else encerrarTelaDeQrCode(id);
+    return;
+  }
+
+  const liberacao = evento.target.closest('.btn-liberar-numero');
+  if (liberacao) {
+    const telefone = liberacao.dataset.telefone;
+    if (!confirm(`Liberar o número ${formatarTelefoneBonito(telefone)}?\n\nEle volta a poder receber mensagens, mas não entra de novo na esteira sozinho — pra isso você precisa cadastrar o lead outra vez.`)) return;
+    api(`/api/bloqueados/${encodeURIComponent(telefone)}`, { method: 'DELETE' })
+      .then(async (resp) => {
+        if (!resp.ok) {
+          const dados = await resp.json().catch(() => ({}));
+          return mensagemDeBloqueio(dados.erro || 'Não consegui liberar esse número.', true);
+        }
+        mensagemDeBloqueio('Número liberado.', false);
+        carregarBloqueados();
+      })
+      .catch(() => mensagemDeBloqueio('Não consegui falar com o servidor agora.', true));
     return;
   }
 

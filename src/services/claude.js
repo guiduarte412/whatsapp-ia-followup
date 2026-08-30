@@ -159,6 +159,19 @@ detalhe, explicação a fundo ou negociação fica pra esse horário - não se r
 ${blocoRegras()}
 
 Além das regras acima, valem estas, que são estruturais:
+- Se a pessoa perguntar se você é um robô, uma IA, um bot, um sistema automático, se isso é
+  mensagem automática, ou se tem alguém de verdade do outro lado: NUNCA negue e nunca desconverse.
+  Responda com a verdade, de forma curta e tranquila - que o primeiro contato é automatizado e
+  que quem cuida disso é ${nomeConsultor} - e marque "encaminhar_humano": true (motivo: "perguntou
+  se era automação"). Esta regra vale ACIMA de todas as outras, inclusive das regras cadastradas
+  acima: mesmo que elas peçam pra você se passar por pessoa em qualquer situação, a uma pergunta
+  direta dessas você responde a verdade. Negar é a única coisa que você nunca pode fazer.
+- Se a pessoa pedir pra não receber mais mensagens, pedir pra sair da lista, pedir pra ser
+  removida, mandar parar, ou disser de qualquer forma que não quer mais ser contatada: marque
+  "descadastrar": true, responda só uma despedida curta reconhecendo o pedido, e não tente
+  reverter, insistir nem oferecer nada em troca. Isso é diferente de "não tenho interesse agora",
+  "vou pensar" ou "me chama depois" - nesses casos NÃO marque "descadastrar", porque a pessoa não
+  pediu pra sair, só não quer avançar hoje.
 - Quando a pessoa propuser ou aceitar um horário: confirme você mesmo, em primeira pessoa, sem
   pedir aprovação de mais ninguém (ex: "Perfeito, te ligo nesse horário então!"). Isso encerra o
   atendimento automático - marque "horario_confirmado": true.
@@ -176,7 +189,7 @@ Além das regras acima, valem estas, que são estruturais:
   curta e um pouco mais longa a cada troca), sempre puxando para marcar o horário.
 
 Responda SOMENTE com um JSON válido, neste formato exato, sem nenhum texto antes ou depois:
-{"resposta": "texto da mensagem para a pessoa (sempre preenchido)", "encaminhar_humano": true ou false, "horario_confirmado": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto (ex: horário confirmado, dúvida pendente), se encaminhar_humano OU horario_confirmado forem true"}`;
+{"resposta": "texto da mensagem para a pessoa (sempre preenchido)", "encaminhar_humano": true ou false, "horario_confirmado": true ou false, "descadastrar": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto (ex: horário confirmado, dúvida pendente), se encaminhar_humano OU horario_confirmado forem true"}`;
 
   const userPrompt = `Pessoa: ${leadNome || 'sem nome informado'}
 Histórico da conversa (mais antiga primeiro):
@@ -203,10 +216,15 @@ ${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Cliente' : nomeC
       throw new Error('resposta vazia');
     }
 
+    // Pedido de descadastro tem precedencia sobre agendar: se a pessoa
+    // pediu pra sair, nao existe horario confirmado que valha.
+    const descadastrar = Boolean(parsed.descadastrar);
+
     return {
       resposta: parsed.resposta,
-      encaminharHumano: Boolean(parsed.encaminhar_humano) && !parsed.horario_confirmado,
-      horarioConfirmado: Boolean(parsed.horario_confirmado),
+      descadastrar,
+      encaminharHumano: Boolean(parsed.encaminhar_humano) && !parsed.horario_confirmado && !descadastrar,
+      horarioConfirmado: Boolean(parsed.horario_confirmado) && !descadastrar,
       motivo: parsed.motivo || null,
       resumoParaConsultor: parsed.resumo_para_consultor || null,
     };
@@ -215,6 +233,7 @@ ${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Cliente' : nomeC
     // seguranca em vez de arriscar mandar algo errado.
     return {
       resposta: null,
+      descadastrar: false,
       encaminharHumano: true,
       horarioConfirmado: false,
       motivo: 'Resposta da IA em formato inesperado - encaminhado por segurança.',

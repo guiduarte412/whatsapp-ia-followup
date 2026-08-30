@@ -176,6 +176,66 @@ function escolherWhatsappParaNovoLead() {
   return ativos[proximo];
 }
 
+// --- Numeros que pediram pra nao receber mais ---
+//
+// Isso e diferente de encerrar o atendimento de um lead. Encerrar para a
+// conversa de agora; o bloqueio gruda no NUMERO e sobrevive a tudo -
+// reimportar a mesma planilha amanha nao traz a pessoa de volta pra
+// esteira. E o unico jeito de cumprir de verdade o "nao me manda mais
+// mensagem" que ela pediu, que e obrigacao legal e, na pratica, e quem
+// recebe de novo depois de pedir pra parar que denuncia o numero.
+//
+// A checagem passa pelas variantes com/sem o 9o digito pelo mesmo motivo
+// do getLeadFlexivel: bloquear com um formato e ser recontatado no outro
+// seria o mesmo que nao ter bloqueado.
+
+function getBloqueados() {
+  const db = load();
+  return db.bloqueados && typeof db.bloqueados === 'object' ? db.bloqueados : {};
+}
+
+function numeroEstaBloqueado(telefone) {
+  if (!telefone) return false;
+  const bloqueados = getBloqueados();
+  return variantesTelefoneBR(String(telefone)).some((variante) => Boolean(bloqueados[variante]));
+}
+
+function bloquearNumero(telefone, { motivo, origem } = {}) {
+  if (!telefone) return null;
+  const db = load();
+  if (!db.bloqueados || typeof db.bloqueados !== 'object') db.bloqueados = {};
+  const registro = {
+    telefone,
+    motivo: (motivo || '').toString().slice(0, 300),
+    origem: origem || 'manual', // 'pedido_do_lead' | 'manual'
+    quando: new Date().toISOString(),
+  };
+  db.bloqueados[telefone] = registro;
+  save(db);
+  return registro;
+}
+
+// Libera todas as variantes de uma vez: se o bloqueio pegou o numero sem o
+// 9o digito, remover so a forma digitada deixaria a pessoa bloqueada sem
+// aparecer mais na lista - um bloqueio invisivel, impossivel de desfazer.
+function desbloquearNumero(telefone) {
+  const db = load();
+  if (!db.bloqueados) return false;
+  let removeu = false;
+  for (const variante of variantesTelefoneBR(String(telefone || ''))) {
+    if (db.bloqueados[variante]) {
+      delete db.bloqueados[variante];
+      removeu = true;
+    }
+  }
+  if (removeu) save(db);
+  return removeu;
+}
+
+function listarBloqueados() {
+  return Object.values(getBloqueados()).sort((a, b) => (b.quando || '').localeCompare(a.quando || ''));
+}
+
 // --- Leads ---
 
 function getLead(phone) {
@@ -257,6 +317,11 @@ function getAllLeads() {
 // a mesma planilha apagaria a conversa inteira e comecaria a mandar
 // mensagem de novo pra quem ja estava sendo atendido.
 function iniciarSequencia(phone, { nome, teste }) {
+  // Barreira principal do opt-out: e aqui que passa TODO mundo que entra na
+  // esteira, tanto pelo formulario quanto pela importacao de planilha. Sem
+  // essa linha, quem pediu pra parar volta na proxima planilha importada.
+  if (numeroEstaBloqueado(phone)) return { phone, bloqueado: true };
+
   const existente = getLeadFlexivel(phone);
   if (existente) return { ...existente, jaExistia: true };
 
@@ -296,7 +361,7 @@ function removerLead(phone) {
 // Cria varios leads de uma vez (usado na importacao de Excel). Retorna
 // quantos entraram certo e quais linhas deram erro, pra mostrar no site.
 function iniciarSequenciaEmLote(linhas) {
-  const resultado = { criados: 0, duplicados: 0, erros: [] };
+  const resultado = { criados: 0, duplicados: 0, bloqueados: 0, erros: [] };
   linhas.forEach((linha, indice) => {
     const telefone = normalizarTelefoneBR(linha.telefone);
     if (!telefone) {
@@ -308,7 +373,11 @@ function iniciarSequenciaEmLote(linhas) {
       return;
     }
     const lead = iniciarSequencia(telefone, { nome: linha.nome });
-    if (lead.jaExistia) resultado.duplicados += 1;
+    // Contado separado dos erros: nao e problema na planilha, e o sistema
+    // respeitando quem pediu pra sair. Aparece no aviso da importacao pra
+    // voce saber que a linha foi vista e deixada de fora de proposito.
+    if (lead.bloqueado) resultado.bloqueados += 1;
+    else if (lead.jaExistia) resultado.duplicados += 1;
     else resultado.criados += 1;
   });
   return resultado;
@@ -377,6 +446,10 @@ function importarTudo(dados) {
 module.exports = {
   PALAVRA_CHAVE_E_PUBLICA,
   normalizarTelefoneBR,
+  numeroEstaBloqueado,
+  bloquearNumero,
+  desbloquearNumero,
+  listarBloqueados,
   getWhatsapps,
   getWhatsappsAtivos,
   getWhatsappPorId,

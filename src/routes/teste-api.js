@@ -1,7 +1,7 @@
 const express = require('express');
 const { responderConversa } = require('../services/claude');
 const { enviarMensagem } = require('../services/whatsapp');
-const { iniciarSequencia, upsertLead, appendConversa, montarMensagemDeAbertura, normalizarTelefoneBR, getWhatsappPorId, getWhatsappsAtivos } = require('../db/store');
+const { iniciarSequencia, upsertLead, appendConversa, montarMensagemDeAbertura, normalizarTelefoneBR, getWhatsappPorId, getWhatsappsAtivos, numeroEstaBloqueado } = require('../db/store');
 
 const router = express.Router();
 router.use(express.json());
@@ -16,6 +16,10 @@ function conexaoParaTeste() {
   return getWhatsappsAtivos()[0] || null;
 }
 
+// Vale pro teste tambem: um numero que pediu pra sair nao recebe mensagem
+// nossa por nenhum caminho, nem "so pra testar".
+const BLOQUEADO = 'esse número pediu pra não receber mais mensagens. Se foi engano, libere em Configurações > Bloqueios.';
+
 // Rota de teste: monta a mensagem de abertura com a MESMA logica usada de
 // verdade (sorteia entre as que voce cadastrou e troca {nome}) e manda pro
 // numero informado, mas NAO mexe no banco de leads - nao entra na esteira,
@@ -27,6 +31,8 @@ router.post('/testar-mensagem', async (req, res) => {
   if (!telefone) {
     return res.status(400).json({ erro: 'telefone invalido - informe DDD + numero (o 55 do Brasil entra sozinho)' });
   }
+
+  if (numeroEstaBloqueado(telefone)) return res.status(400).json({ erro: BLOQUEADO });
 
   const texto = montarMensagemDeAbertura(nome);
   if (!texto) return res.status(400).json({ erro: SEM_MENSAGEM });
@@ -78,6 +84,8 @@ router.post('/testar-whatsapp', async (req, res) => {
   if (!telefone) {
     return res.status(400).json({ erro: 'telefone invalido - informe DDD + numero (o 55 do Brasil entra sozinho)' });
   }
+
+  if (numeroEstaBloqueado(telefone)) return res.status(400).json({ erro: BLOQUEADO });
 
   const texto = montarMensagemDeAbertura(nome);
   if (!texto) return res.status(400).json({ erro: SEM_MENSAGEM });

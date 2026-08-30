@@ -24,6 +24,12 @@ router.post('/leads', (req, res) => {
     return res.status(400).json({ erro: 'nome e obrigatorio' });
   }
   const lead = iniciarSequencia(telefone, { nome });
+  if (lead.bloqueado) {
+    return res.status(400).json({
+      erro: 'esse número pediu pra não receber mais mensagens, então não entrou na esteira. '
+        + 'Se foi engano, libere em Configurações > Bloqueios.',
+    });
+  }
   // Lead repetido nao e erro (a esteira dele continua intacta, de proposito),
   // mas tambem nao e criacao - responder 201 fazia a tela dizer "adicionado"
   // pra quem, na pratica, nao adicionou nada.

@@ -1,8 +1,9 @@
 const express = require('express');
-const { getLeadFlexivel, upsertLead, appendConversa, getPausado, getConfig, getWhatsappPorId } = require('../db/store');
+const { getLeadFlexivel, upsertLead, appendConversa, getPausado, getConfig, getWhatsappPorId, numeroEstaBloqueado, bloquearNumero } = require('../db/store');
 const { avisarConsultor, enviarMensagem, formatarAvisoLead, foiEnviadaPorNos } = require('../services/whatsapp');
 const { responderConversa } = require('../services/claude');
 const { extrairTexto } = require('../services/media');
+const { pediuParaParar, respostaDeDespedida } = require('../services/optout');
 
 const router = express.Router();
 
@@ -34,6 +35,38 @@ function normalizarTexto(valor) {
 // "?segredo=<valor>" na URL que voce cola na Z-API pra fechar essa porta.
 // Sem a variavel definida, nada muda - quem ja esta rodando continua
 // funcionando sem precisar reconfigurar nada com pressa.
+// Registra o "nao me manda mais mensagem": bloqueia o numero pra sempre,
+// encerra o atendimento e avisa voce. O bloqueio gruda no numero, entao
+// reimportar a planilha depois nao traz a pessoa de volta.
+//
+// "despedida" e a mensagem de confirmacao. Quando o pedido veio pelo texto,
+// o proprio sistema escreve; quando quem percebeu foi a IA, ela ja
+// respondeu e nao se manda nada a mais - ninguem que pediu pra parar quer
+// receber duas mensagens por causa disso.
+async function registrarDescadastro({ lead, telefone, textoRecebido, conexao, despedida }) {
+  bloquearNumero(telefone, { motivo: textoRecebido, origem: 'pedido_do_lead' });
+  upsertLead(telefone, { status: 'encerrado', motivoEncerramento: 'optout' });
+
+  if (despedida) {
+    try {
+      await enviarMensagem(telefone, despedida, conexao);
+      appendConversa(telefone, { de: 'ia', texto: despedida });
+    } catch (erro) {
+      console.error(`Nao consegui mandar a confirmacao de descadastro pra ${telefone}:`, erro.message);
+    }
+  }
+
+  console.log(`Lead ${telefone} pediu pra parar de receber - numero bloqueado.`);
+
+  await avisarConsultor(formatarAvisoLead({
+    nome: lead.nome,
+    telefone,
+    contexto: `Pediu pra não receber mais mensagens: "${textoRecebido}"\n`
+      + 'Bloqueei esse número: ele não entra mais na esteira nem se voltar numa planilha. '
+      + 'Se a pessoa mudar de ideia, dá pra liberar em Configurações > Bloqueios.',
+  }), conexao).catch(() => {});
+}
+
 function segredoConfere(req) {
   const esperado = process.env.ZAPI_WEBHOOK_SEGREDO;
   if (!esperado) return true;
@@ -152,6 +185,35 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
     return res.status(200).json({ ok: true });
   }
 
+  // Numero que ja pediu pra sair e volta a escrever: registra e avisa voce,
+  // mas nao responde nada automatico. Se ele quer voltar a conversar, quem
+  // decide isso e voce, liberando o numero em Configuracoes > Bloqueios.
+  if (numeroEstaBloqueado(telefoneLead)) {
+    appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
+    await avisarConsultor(formatarAvisoLead({
+      nome: lead.nome,
+      telefone: telefoneLead,
+      contexto: `Mandou mensagem, mas esse número está bloqueado a pedido dele: "${textoRecebido}"\n`
+        + 'Não respondi nada automático. Se quiser retomar, libere em Configurações > Bloqueios.',
+    }), conexao).catch(() => {});
+    return res.status(200).json({ ok: true, bloqueado: true });
+  }
+
+  // Pedido de descadastro escrito com todas as letras. Resolvido aqui, antes
+  // da IA: quem pediu pra parar nao precisa esperar um modelo concordar, e
+  // nao ha por que gastar credito interpretando "me tira dessa lista".
+  if (pediuParaParar(textoRecebido)) {
+    appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
+    await registrarDescadastro({
+      lead,
+      telefone: telefoneLead,
+      textoRecebido,
+      conexao,
+      despedida: respostaDeDespedida(lead.nome),
+    });
+    return res.status(200).json({ ok: true, descadastrado: true });
+  }
+
   try {
     // Se ja esta com humano ou ja foi encerrado, a IA nao interfere mais -
     // so avisa que chegou mensagem nova (exceto se ja encerrado, ai so
@@ -211,6 +273,20 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
         }), conexao).catch(() => {});
         return res.status(200).json({ ok: true });
       }
+    }
+
+    // A IA entendeu como pedido de saída algo que a checagem por texto não
+    // pegou ("prefiro não receber mais contato sobre isso"). A despedida
+    // dela já foi enviada acima, então aqui só registra o bloqueio.
+    if (resultado.descadastrar) {
+      await registrarDescadastro({
+        lead,
+        telefone: telefoneLead,
+        textoRecebido,
+        conexao,
+        despedida: null,
+      });
+      return res.status(200).json({ ok: true, descadastrado: true });
     }
 
     if (resultado.horarioConfirmado) {

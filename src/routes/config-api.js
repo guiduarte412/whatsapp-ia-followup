@@ -1,5 +1,5 @@
 const express = require('express');
-const { getConfig, salvarConfig, normalizarTelefoneBR, getWhatsappPorId } = require('../db/store');
+const { getConfig, salvarConfig, normalizarTelefoneBR, getWhatsappPorId, listarBloqueados, bloquearNumero, desbloquearNumero, numeroEstaBloqueado, getLeadFlexivel, upsertLead } = require('../db/store');
 const { statusConexao, obterQrCode, desconectar } = require('../services/whatsapp');
 
 const router = express.Router();
@@ -180,6 +180,46 @@ router.put('/config', (req, res) => {
   }
 
   res.json(paraATela(salvarConfig(parcial)));
+});
+
+// --- Numeros bloqueados (quem pediu pra nao receber mais) ---
+
+router.get('/bloqueados', (req, res) => {
+  res.json(listarBloqueados());
+});
+
+// Bloqueio manual: a pessoa pediu por telefone, pessoalmente, ou por outro
+// canal qualquer. Encerra tambem o lead, se existir - nao adianta bloquear
+// o numero e deixar a conversa correndo.
+router.post('/bloqueados', (req, res) => {
+  const telefone = normalizarTelefoneBR(req.body?.telefone);
+  if (!telefone) {
+    return res.status(400).json({ erro: 'telefone inválido - informe DDD + número' });
+  }
+  if (numeroEstaBloqueado(telefone)) {
+    return res.status(409).json({ erro: 'esse número já está bloqueado' });
+  }
+
+  const registro = bloquearNumero(telefone, {
+    motivo: (req.body?.motivo || '').toString().trim() || 'bloqueado manualmente no painel',
+    origem: 'manual',
+  });
+
+  const lead = getLeadFlexivel(telefone);
+  if (lead && lead.status !== 'encerrado') {
+    upsertLead(lead.phone, { status: 'encerrado', motivoEncerramento: 'optout', proximoEnvioEm: null });
+  }
+
+  res.status(201).json(registro);
+});
+
+router.delete('/bloqueados/:telefone', (req, res) => {
+  const removeu = desbloquearNumero(req.params.telefone);
+  if (!removeu) return res.status(404).json({ erro: 'esse número não estava bloqueado' });
+  // Liberar o numero NAO recoloca o lead na esteira de proposito: quem
+  // decide falar de novo com alguem que pediu pra sair e voce, cadastrando
+  // o lead outra vez.
+  res.json({ ok: true });
 });
 
 // --- Conexao dos numeros (status / QR Code / desconectar) ---
