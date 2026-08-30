@@ -631,7 +631,9 @@ document.getElementById('form-codigo').addEventListener('submit', async (evento)
     novoCodigo: document.getElementById('codigo-novo').value.trim(),
   };
 
-  const resp = await fetch('/api/acesso/alterar', {
+  // Vai por api() pra mandar o token da sessão junto: quem já está no painel
+  // troca o código direto, sem depender da palavra-chave ser um segredo.
+  const resp = await api('/api/acesso/alterar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(dados),

@@ -79,6 +79,7 @@ function exigirSessao(req, res, next) {
 }
 
 module.exports = {
+  sessaoValida,
   estaBloqueado,
   registrarFalha,
   limparFalhas,

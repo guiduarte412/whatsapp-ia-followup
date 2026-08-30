@@ -1,2 +1,7 @@
 node_modules/
 .env
+
+# O banco fica fora do controle de versao: e nele que ficam os tokens da
+# Z-API, o codigo de acesso e as conversas dos leads. Em producao o arquivo
+# vive no Volume do Railway; local, ele e criado sozinho no primeiro uso.
+data/

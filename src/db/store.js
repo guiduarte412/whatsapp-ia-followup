@@ -14,7 +14,16 @@ const PASTA_DADOS = process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname
 const DB_PATH = path.join(PASTA_DADOS, 'db.json');
 
 const CODIGO_ACESSO_PADRAO = '059597';
-const PALAVRA_CHAVE_MESTRA = 'KAMILLY';
+
+// A palavra-chave que autoriza trocar o codigo de acesso. O valor abaixo
+// esta no codigo-fonte, num repositorio publico - ou seja, qualquer pessoa
+// consegue ler. Por isso ele NAO vale sozinho: quando a variavel de
+// ambiente PALAVRA_CHAVE_MESTRA nao esta configurada, a rota de troca passa
+// a exigir tambem uma sessao ja aberta (ver acesso-api.js). Configure a
+// variavel no Railway com um segredo de verdade e ela volta a servir de
+// recuperacao de acesso, que e a funcao dela.
+const PALAVRA_CHAVE_MESTRA = process.env.PALAVRA_CHAVE_MESTRA || 'KAMILLY';
+const PALAVRA_CHAVE_E_PUBLICA = !process.env.PALAVRA_CHAVE_MESTRA;
 
 // Configuracao editavel pelo site. Nada aqui e sobre um produto ou
 // segmento especifico: o texto das mensagens, as regras que a IA segue e
@@ -366,6 +375,7 @@ function importarTudo(dados) {
 }
 
 module.exports = {
+  PALAVRA_CHAVE_E_PUBLICA,
   normalizarTelefoneBR,
   getWhatsapps,
   getWhatsappsAtivos,
