@@ -24,8 +24,41 @@ function credenciais(conexao) {
   };
 }
 
+// Toda mensagem que o proprio sistema manda volta como webhook "fromMe" da
+// Z-API, e o webhook precisa distinguir esse eco de uma mensagem que voce
+// digitou no celular (que encerra o atendimento automatico). Comparar com o
+// historico salvo nao basta: o eco chega em milissegundos e pode passar na
+// frente da gravacao, e ai o sistema encerraria a conversa achando que
+// alguem assumiu. Por isso a mensagem e anotada aqui, ANTES de sair.
+//
+// A chave e so o texto (nao o telefone) de proposito: a Z-API as vezes
+// reporta o numero com/sem o 9o digito, e errar pro lado de "e eco" apenas
+// deixa de encerrar sozinho - o botao "Assumir conversa" continua ali.
+// Errar pro outro lado mataria uma conversa em andamento.
+const enviadasPorNos = new Map();
+const JANELA_ECO_MS = 5 * 60 * 1000;
+
+function chaveDaMensagem(texto) {
+  return (texto || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function registrarEnvioProprio(mensagem) {
+  const agora = Date.now();
+  for (const [chave, quando] of enviadasPorNos) {
+    if (agora - quando > JANELA_ECO_MS) enviadasPorNos.delete(chave);
+  }
+  enviadasPorNos.set(chaveDaMensagem(mensagem), agora);
+}
+
+function foiEnviadaPorNos(texto) {
+  const quando = enviadasPorNos.get(chaveDaMensagem(texto));
+  return Boolean(quando && Date.now() - quando <= JANELA_ECO_MS);
+}
+
 async function enviarMensagem(telefone, mensagem, conexao) {
   const { instanceId, token, clientToken } = credenciais(conexao);
+  // Antes do await: o eco pode chegar antes desta chamada retornar.
+  registrarEnvioProprio(mensagem);
   try {
     return await axios.post(
       `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`,
@@ -108,6 +141,7 @@ function formatarAvisoLead({ nome, telefone, contexto }) {
 
 module.exports = {
   enviarMensagem,
+  foiEnviadaPorNos,
   avisarConsultor,
   formatarAvisoLead,
   statusConexao,

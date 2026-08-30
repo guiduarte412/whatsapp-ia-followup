@@ -268,7 +268,12 @@ document.getElementById('filtro-whatsapp').addEventListener('change', renderizar
 
 // O quadro se atualiza sozinho a cada 30s enquanto estiver aberto, pra
 // refletir mensagens que sairam ou leads que responderam nesse meio tempo.
+// A checagem da sessao nao e detalhe: #view-leads nasce sem display:none,
+// entao na tela do codigo de acesso esse timer tambem passava - a chamada
+// voltava 401, o tratamento de sessao expirada recarregava a pagina e o
+// codigo que a pessoa estava digitando sumia a cada 30 segundos.
 setInterval(() => {
+  if (!sessionStorage.getItem('sessaoToken')) return;
   if (document.getElementById('view-leads').style.display !== 'none') carregarLeads();
 }, 30000);
 
@@ -359,9 +364,17 @@ document.getElementById('form-novo').addEventListener('submit', async (evento) =
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dados),
     });
+    const corpo = await resp.json();
     if (!resp.ok) {
-      const corpo = await resp.json();
       erroBox.textContent = corpo.erro || 'Não consegui adicionar esse lead.';
+      erroBox.style.display = 'block';
+      return;
+    }
+    if (corpo.jaExistia) {
+      // Nao e erro: o lead segue com a esteira e a conversa dele intactas.
+      // Mas dizer "adicionado" e sumir com a tela faria voce achar que
+      // entrou um lead novo.
+      erroBox.textContent = 'Esse número já estava cadastrado — mantive a conversa e o histórico dele como estavam.';
       erroBox.style.display = 'block';
       return;
     }
@@ -486,7 +499,7 @@ function simMostrarEncaminhado(resultado) {
   document.getElementById('sim-input-area').style.display = 'none';
   const box = document.getElementById('sim-encaminhado');
   box.style.display = 'block';
-  box.innerHTML = `<strong>A IA encaminharia pra você agora.</strong><br>${resultado.resumoParaConsultor || resultado.motivo || ''}`;
+  box.innerHTML = `<strong>A IA encaminharia pra você agora.</strong><br>${escaparTexto(resultado.resumoParaConsultor || resultado.motivo || '')}`;
 }
 
 document.getElementById('btn-iniciar-simulacao').addEventListener('click', async () => {
@@ -572,8 +585,8 @@ async function carregarDetalheLead(telefone) {
 
   document.getElementById('lead-nome').textContent = lead.nome || telefone;
   document.getElementById('lead-resumo').innerHTML = `
-    <span class="status ${lead.status}"><span class="ponto"></span>${LABELS_STATUS[lead.status] || lead.status}</span>
-    &nbsp;·&nbsp; <span style="font-family: var(--font-mono); font-size: 13px;">${lead.phone}</span>
+    <span class="status ${escaparAtributo(lead.status)}"><span class="ponto"></span>${escaparTexto(LABELS_STATUS[lead.status] || lead.status)}</span>
+    &nbsp;·&nbsp; <span style="font-family: var(--font-mono); font-size: 13px;">${escaparTexto(lead.phone)}</span>
   `;
 
   const conversaDiv = document.getElementById('lead-conversa');
@@ -584,8 +597,8 @@ async function carregarDetalheLead(telefone) {
     ? '<p style="color: var(--texto-fraco);">Nenhuma mensagem trocada ainda.</p>'
     : conversa.map((m) => `
         <div class="bolha ${m.de === 'lead' ? 'lead' : 'ia'}">
-          ${m.texto}
-          ${m.timestamp ? `<span class="hora">${formatarHora(m.timestamp)}</span>` : ''}
+          ${escaparTexto(m.texto)}
+          ${m.timestamp ? `<span class="hora">${escaparTexto(formatarHora(m.timestamp))}</span>` : ''}
         </div>
       `).join('');
 
@@ -683,10 +696,10 @@ async function gerarRelatorio() {
     ? '<div class="vazio">Nenhuma atividade nessa data.</div>'
     : relatorioAtual.map((item) => `
         <a class="linha-lead" style="grid-template-columns: 1.2fr 1fr 1fr 2fr;" href="#lead/${encodeURIComponent(item.telefone)}">
-          <span class="nome">${item.nome}</span>
-          <span class="telefone">${item.telefone}</span>
-          <span class="status">${item.status}</span>
-          <span style="font-size: 13px; color: var(--texto-fraco);">${item.resumo}</span>
+          <span class="nome">${escaparTexto(item.nome)}</span>
+          <span class="telefone">${escaparTexto(item.telefone)}</span>
+          <span class="status">${escaparTexto(item.status)}</span>
+          <span style="font-size: 13px; color: var(--texto-fraco);">${escaparTexto(item.resumo)}</span>
         </a>
       `).join('');
 }
@@ -728,11 +741,13 @@ function cartaoMetrica(valor, rotulo) {
 
 async function carregarMetricas() {
   const resp = await api('/api/leads');
-  const leads = await resp.json();
+  // Lead de teste e voce mesmo conversando com o sistema - contar isso aqui
+  // estraga justamente o numero que diz se a operacao esta funcionando.
+  const leads = (await resp.json()).filter((l) => !l.teste);
   const container = document.getElementById('metricas-cartoes');
 
   if (!leads.length) {
-    container.innerHTML = '<div class="vazio">Nenhum lead ainda.</div>';
+    container.innerHTML = '<div class="vazio">Nenhum lead real ainda (leads de teste não entram nas métricas).</div>';
     return;
   }
 

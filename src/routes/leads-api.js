@@ -24,7 +24,10 @@ router.post('/leads', (req, res) => {
     return res.status(400).json({ erro: 'nome e obrigatorio' });
   }
   const lead = iniciarSequencia(telefone, { nome });
-  res.status(201).json(lead);
+  // Lead repetido nao e erro (a esteira dele continua intacta, de proposito),
+  // mas tambem nao e criacao - responder 201 fazia a tela dizer "adicionado"
+  // pra quem, na pratica, nao adicionou nada.
+  res.status(lead.jaExistia ? 200 : 201).json(lead);
 });
 
 // Importacao em lote (usado pelo importador de Excel no site - o arquivo e

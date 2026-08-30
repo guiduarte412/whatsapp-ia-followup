@@ -1,12 +1,20 @@
 const express = require('express');
 const { responderConversa } = require('../services/claude');
 const { enviarMensagem } = require('../services/whatsapp');
-const { iniciarSequencia, upsertLead, appendConversa, montarMensagemDeAbertura, normalizarTelefoneBR } = require('../db/store');
+const { iniciarSequencia, upsertLead, appendConversa, montarMensagemDeAbertura, normalizarTelefoneBR, getWhatsappPorId, getWhatsappsAtivos } = require('../db/store');
 
 const router = express.Router();
 router.use(express.json());
 
 const SEM_MENSAGEM = 'Nenhuma mensagem cadastrada. Vá em Configurações > Mensagens e cadastre pelo menos uma.';
+
+// Teste tem que sair pelo mesmo caminho do envio real. Sem isso, quem
+// cadastrou numeros na tela via o teste sair pelas credenciais das
+// variaveis de ambiente - que podem nem existir - e o teste falhava (ou
+// pior: saia por um numero diferente do que o painel diz).
+function conexaoParaTeste() {
+  return getWhatsappsAtivos()[0] || null;
+}
 
 // Rota de teste: monta a mensagem de abertura com a MESMA logica usada de
 // verdade (sorteia entre as que voce cadastrou e troca {nome}) e manda pro
@@ -24,7 +32,7 @@ router.post('/testar-mensagem', async (req, res) => {
   if (!texto) return res.status(400).json({ erro: SEM_MENSAGEM });
 
   try {
-    await enviarMensagem(telefone, texto);
+    await enviarMensagem(telefone, texto, conexaoParaTeste());
     res.json({ texto });
   } catch (erro) {
     res.status(500).json({ erro: erro.message || 'falha ao enviar mensagem de teste' });
@@ -76,7 +84,9 @@ router.post('/testar-whatsapp', async (req, res) => {
 
   try {
     const lead = iniciarSequencia(telefone, { nome, teste: true });
-    await enviarMensagem(telefone, texto);
+    // Pelo numero que o rodizio fixou nesse lead - e ele que vai receber a
+    // resposta no webhook, entao a abertura precisa sair por ele tambem.
+    await enviarMensagem(telefone, texto, getWhatsappPorId(lead.whatsappId));
     appendConversa(telefone, { de: 'ia', texto });
     // A unica mensagem da esteira ja saiu aqui - o lead vai direto pra
     // espera de resposta, sem nada agendado depois.

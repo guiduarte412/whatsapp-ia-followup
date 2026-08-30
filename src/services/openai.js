@@ -19,6 +19,7 @@ async function transcreverAudio(base64, mimeType) {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         ...form.getHeaders(),
       },
+      timeout: 60_000, // audio longo demora; sem teto, o webhook fica preso
     });
     return resposta.data.text;
   } catch (erro) {

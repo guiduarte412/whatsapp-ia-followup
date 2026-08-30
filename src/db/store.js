@@ -60,16 +60,37 @@ function load() {
   if (!fs.existsSync(DB_PATH)) {
     return { leads: {}, codigoAcesso: CODIGO_ACESSO_PADRAO, config: mesclarConfig(null) };
   }
-  const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+  let db;
+  try {
+    db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+  } catch (erro) {
+    // Falha ALTO de proposito, em vez de comecar com o banco vazio: subir
+    // sem os leads faria o sistema parecer normal enquanto o arquivo com
+    // tudo ainda esta la, e o primeiro save() gravaria por cima dele - ai
+    // sim a perda seria definitiva.
+    throw new Error(
+      `O arquivo de dados (${DB_PATH}) esta ilegivel: ${erro.message}\n` +
+      'Nao subi o servidor pra nao gravar por cima dele. Restaure o ultimo backup ' +
+      '(tela Backup > Restaurar de um arquivo) ou conserte o arquivo antes de reiniciar.'
+    );
+  }
   if (!db.leads) db.leads = {};
   if (!db.codigoAcesso) db.codigoAcesso = CODIGO_ACESSO_PADRAO;
   db.config = mesclarConfig(db.config);
   return db;
 }
 
+// Grava num arquivo temporario e so entao renomeia por cima do db.json.
+// Escrever direto no db.json parece igual, mas nao e: se o processo morrer
+// no meio da escrita (deploy do Railway, falta de memoria, queda da
+// maquina), o arquivo fica pela metade e leva junto TODOS os leads e
+// conversas. O rename e atomico no mesmo disco - ou o db.json e o antigo
+// inteiro, ou e o novo inteiro, nunca um pedaco dos dois.
 function save(db) {
   fs.mkdirSync(PASTA_DADOS, { recursive: true });
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  const temporario = `${DB_PATH}.tmp`;
+  fs.writeFileSync(temporario, JSON.stringify(db, null, 2));
+  fs.renameSync(temporario, DB_PATH);
 }
 
 // --- Configuracao (tudo editavel pelo site) ---

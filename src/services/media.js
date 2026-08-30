@@ -2,8 +2,20 @@ const axios = require('axios');
 const { descreverImagem } = require('./claude');
 const { transcreverAudio } = require('./openai');
 
+// Teto e timeout nao sao detalhe aqui: a URL vem de fora (o lead escolhe o
+// que manda) e o download acontece no meio do webhook. Sem limite, um
+// arquivo grande estoura a memoria do servidor; sem timeout, uma URL lenta
+// segura o webhook e a resposta pro lead nunca sai.
+const MAX_BYTES_MIDIA = 12 * 1024 * 1024; // 12 MB
+const TIMEOUT_DOWNLOAD_MS = 20_000;
+
 async function baixarBase64(url) {
-  const resposta = await axios.get(url, { responseType: 'arraybuffer' });
+  const resposta = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: TIMEOUT_DOWNLOAD_MS,
+    maxContentLength: MAX_BYTES_MIDIA,
+    maxBodyLength: MAX_BYTES_MIDIA,
+  });
   return Buffer.from(resposta.data).toString('base64');
 }
 

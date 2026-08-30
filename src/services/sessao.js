@@ -23,8 +23,12 @@ function limparExpirados() {
 }
 setInterval(limparExpirados, 60 * 60 * 1000).unref();
 
+// Usa o req.ip do Express, que respeita o "trust proxy" configurado no
+// server.js. Ler o X-Forwarded-For cru (como era antes) deixava o bloqueio
+// inutil: quem esta testando codigos manda o cabecalho que quiser e vira um
+// "IP" novo a cada tentativa, entao as 5 tentativas nunca se esgotavam.
 function ipDaRequisicao(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0].trim() || req.ip || 'desconhecido';
+  return req.ip || 'desconhecido';
 }
 
 function estaBloqueado(req) {

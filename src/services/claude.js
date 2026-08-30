@@ -125,6 +125,7 @@ async function descreverImagem({ base64, mimeType }) {
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         },
+        timeout: 30_000,
       }
     );
     return response.data.content

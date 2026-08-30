@@ -1,6 +1,6 @@
 const express = require('express');
 const { getLeadFlexivel, upsertLead, appendConversa, getPausado, getConfig, getWhatsappPorId } = require('../db/store');
-const { avisarConsultor, enviarMensagem, formatarAvisoLead } = require('../services/whatsapp');
+const { avisarConsultor, enviarMensagem, formatarAvisoLead, foiEnviadaPorNos } = require('../services/whatsapp');
 const { responderConversa } = require('../services/claude');
 const { extrairTexto } = require('../services/media');
 
@@ -27,12 +27,40 @@ function normalizarTexto(valor) {
 // assim que o sistema sabe por qual numero a resposta chegou, sem depender
 // do formato do payload. A URL sem apelido continua valendo pra quem tem um
 // numero so.
+// Esta rota fica FORA da protecao de sessao (a Z-API nao tem como mandar
+// token), entao quem descobrir a URL consegue injetar mensagem falsa no
+// historico de um lead, fazer a IA responder gastando credito ou encerrar
+// atendimento. Defina ZAPI_WEBHOOK_SEGREDO no Railway e acrescente
+// "?segredo=<valor>" na URL que voce cola na Z-API pra fechar essa porta.
+// Sem a variavel definida, nada muda - quem ja esta rodando continua
+// funcionando sem precisar reconfigurar nada com pressa.
+function segredoConfere(req) {
+  const esperado = process.env.ZAPI_WEBHOOK_SEGREDO;
+  if (!esperado) return true;
+  return req.query?.segredo === esperado || req.headers['x-webhook-segredo'] === esperado;
+}
+
 router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, res) => {
+  if (!segredoConfere(req)) {
+    console.warn('Webhook recusado: segredo ausente ou incorreto.');
+    return res.status(401).json({ erro: 'nao autorizado' });
+  }
+
   const payload = req.body;
 
   // Log do payload cru - se algo nao bater, da pra ver o formato real nos
   // logs do Railway (Deployments -> View Logs) e ajustar os campos abaixo.
   console.log('Webhook WhatsApp recebido:', JSON.stringify(payload));
+
+  // A Z-API manda mais coisa nessa mesma URL do que mensagem de lead:
+  // confirmacao de entrega, "visto por", status da conexao. Esses avisos
+  // tambem trazem "phone", entao sem esse filtro eles entravam como se
+  // fossem mensagem, a IA respondia a um evento que ninguem escreveu e
+  // ainda gastava credito. So o callback de mensagem recebida segue adiante;
+  // se o campo nao vier (formato antigo), mantem o comportamento de antes.
+  if (payload?.type && payload.type !== 'ReceivedCallback') {
+    return res.status(200).json({ ok: true, ignorado: payload.type });
+  }
 
   const telefoneRecebido = normalizarTelefone(payload?.phone || payload?.from);
   if (!telefoneRecebido) return res.status(400).json({ erro: 'telefone nao encontrado no payload' });
@@ -75,7 +103,12 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
   if (payload?.fromMe === true) {
     const textoSimples = payload?.text?.message || payload?.message || '';
     const ultimaDaIA = [...(lead.conversa || [])].reverse().find((m) => m.de === 'ia');
-    const ehEcoDaIA = ultimaDaIA && normalizarTexto(ultimaDaIA.texto) === normalizarTexto(textoSimples);
+    // Duas checagens, e nao uma: o registro em memoria (feito no instante do
+    // envio) pega o eco que chega antes da gravacao no historico; a
+    // comparacao com o historico pega o eco de uma mensagem enviada antes do
+    // ultimo reinicio, quando esse registro ja se perdeu.
+    const ehEcoDaIA = foiEnviadaPorNos(textoSimples)
+      || (ultimaDaIA && normalizarTexto(ultimaDaIA.texto) === normalizarTexto(textoSimples));
 
     // So fecha automaticamente quando da pra comparar com uma mensagem da
     // IA conhecida e ela for diferente. Sem essa mensagem de referencia

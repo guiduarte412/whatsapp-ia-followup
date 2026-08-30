@@ -10,7 +10,13 @@ router.get('/pausa', (req, res) => {
 });
 
 router.post('/pausa', (req, res) => {
-  res.json({ pausado: setPausado(req.body?.pausado) });
+  // Exige true/false explicito. Antes, um corpo vazio ou malformado virava
+  // "false" e RETOMAVA os envios - o oposto do que um botao de emergencia
+  // pode fazer por engano.
+  if (typeof req.body?.pausado !== 'boolean') {
+    return res.status(400).json({ erro: 'informe pausado: true ou false' });
+  }
+  res.json({ pausado: setPausado(req.body.pausado) });
 });
 
 // Baixa TUDO (leads, conversas, exemplos, configuracoes) num arquivo JSON.
