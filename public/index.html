@@ -284,6 +284,43 @@
           </p>
           <div id="cfg-mensagens"></div>
           <button type="button" class="botao secundario" id="btn-add-mensagem" style="margin-top:16px;">+ Adicionar mensagem</button>
+
+          <hr style="border:none; border-top:1px solid var(--linha); margin:36px 0 28px;">
+
+          <h3 style="margin:0 0 4px; font-size:16px;">Segunda tentativa</h3>
+          <p class="dica" style="margin-top:0;">
+            Para quem não respondeu a primeira mensagem. É daqui que costuma vir boa parte
+            do retorno — mas só funciona com um texto <strong>diferente</strong> da abertura:
+            reenviar "oi, tudo bem?" pro mesmo número é o padrão que o WhatsApp lê como spam.
+            Escreva como quem lembrou da pessoa, não como quem está cobrando.
+          </p>
+          <p class="dica">
+            <strong>Deixe vazio se não quiser segunda tentativa</strong> — sem nenhuma mensagem
+            aqui, o sistema manda uma só e para, como sempre fez. Cada lead recebe no máximo
+            duas mensagens no total; não existe terceira.
+          </p>
+          <p class="dica">
+            Vale só para leads novos: quem já recebeu a abertura antes de você cadastrar isso
+            não recebe a segunda de surpresa.
+          </p>
+          <div id="cfg-followups"></div>
+          <button type="button" class="botao secundario" id="btn-add-followup" style="margin-top:16px;">+ Adicionar mensagem de segunda tentativa</button>
+
+          <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:28px;">
+            <div class="campo" style="flex:1; min-width:200px; margin-bottom:0;">
+              <label for="cfg-followup-min">Esperar no mínimo, em horas</label>
+              <input type="number" id="cfg-followup-min" min="1" max="720">
+            </div>
+            <div class="campo" style="flex:1; min-width:200px; margin-bottom:0;">
+              <label for="cfg-followup-max">Esperar no máximo, em horas</label>
+              <input type="number" id="cfg-followup-max" min="1" max="720">
+            </div>
+          </div>
+          <p class="dica">
+            Contado a partir da primeira mensagem. A espera de cada lead é sorteada dentro
+            dessa faixa, pra os follow-ups não saírem todos no mesmo horário. 48 a 72 horas
+            é um intervalo seguro; menos de um dia costuma soar como cobrança.
+          </p>
         </div>
 
         <div class="painel-config" id="config-regras" style="display:none;">

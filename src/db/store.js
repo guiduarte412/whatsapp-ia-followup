@@ -38,6 +38,12 @@ const CONFIG_PADRAO = {
   },
   whatsapps: [],    // numeros conectados na Z-API (vazio = usa as variaveis de ambiente)
   mensagens: [],    // mensagens de abertura da esteira (uma e sorteada por lead)
+  // Segunda tentativa, pra quem nao respondeu a abertura. Lista propria de
+  // proposito: repetir a mesma mensagem de abertura seria mandar "oi, tudo
+  // bem?" duas vezes pro mesmo numero, que e o padrao que o WhatsApp lê como
+  // spam. Vazia = nao existe 2a tentativa, e o sistema se comporta como
+  // sempre se comportou.
+  mensagensFollowup: [],
   regras: [],       // regras que a IA precisa seguir na conversa
   horarios: {
     inicio: 8,            // hora em que os envios podem comecar (Brasilia)
@@ -46,6 +52,8 @@ const CONFIG_PADRAO = {
     atrasoMaxMinutos: 60, // atraso maximo (sorteado entre min e max)
     intervaloMinSegundos: 20, // pausa minima entre um envio e o proximo
     intervaloMaxSegundos: 60, // pausa maxima (sorteada entre min e max)
+    followupHorasMin: 48, // espera minima entre a abertura e a 2a tentativa
+    followupHorasMax: 72, // espera maxima (sorteada entre min e max)
   },
   maxRespostasAutomaticas: 5, // trava: depois disso a IA passa a conversa pra voce
 };
@@ -59,6 +67,7 @@ function mesclarConfig(salva) {
     identidade: { ...CONFIG_PADRAO.identidade, ...(c.identidade || {}) },
     whatsapps: Array.isArray(c.whatsapps) ? c.whatsapps : [],
     mensagens: Array.isArray(c.mensagens) ? c.mensagens : [],
+    mensagensFollowup: Array.isArray(c.mensagensFollowup) ? c.mensagensFollowup : [],
     regras: Array.isArray(c.regras) ? c.regras : [],
     horarios: { ...CONFIG_PADRAO.horarios, ...(c.horarios || {}) },
     maxRespostasAutomaticas: Number(c.maxRespostasAutomaticas) || CONFIG_PADRAO.maxRespostasAutomaticas,
@@ -115,6 +124,7 @@ function salvarConfig(parcial) {
     identidade: { ...atual.identidade, ...(parcial.identidade || {}) },
     whatsapps: parcial.whatsapps !== undefined ? parcial.whatsapps : atual.whatsapps,
     mensagens: parcial.mensagens !== undefined ? parcial.mensagens : atual.mensagens,
+    mensagensFollowup: parcial.mensagensFollowup !== undefined ? parcial.mensagensFollowup : atual.mensagensFollowup,
     regras: parcial.regras !== undefined ? parcial.regras : atual.regras,
     horarios: { ...atual.horarios, ...(parcial.horarios || {}) },
     maxRespostasAutomaticas: parcial.maxRespostasAutomaticas !== undefined
@@ -129,8 +139,8 @@ function salvarConfig(parcial) {
 // do lead. Devolve null se nao houver nenhuma mensagem cadastrada - quem
 // chama decide o que fazer (o agendador avisa voce em vez de inventar
 // texto por conta propria).
-function montarMensagemDeAbertura(nomeDoLead) {
-  const validas = getConfig().mensagens.filter((m) => m && m.trim());
+function sortearMensagem(lista, nomeDoLead) {
+  const validas = (lista || []).filter((m) => m && m.trim());
   if (!validas.length) return null;
   const escolhida = validas[Math.floor(Math.random() * validas.length)];
   const primeiroNome = (nomeDoLead || '').trim().split(' ')[0] || '';
@@ -141,6 +151,23 @@ function montarMensagemDeAbertura(nomeDoLead) {
     .replace(/ +([,.!?;:])/g, '$1')
     .replace(/ {2,}/g, ' ')
     .trim();
+}
+
+function montarMensagemDeAbertura(nomeDoLead) {
+  return sortearMensagem(getConfig().mensagens, nomeDoLead);
+}
+
+// Mensagem da 2a tentativa, pra quem nao respondeu a abertura.
+function montarMensagemDeFollowup(nomeDoLead) {
+  return sortearMensagem(getConfig().mensagensFollowup, nomeDoLead);
+}
+
+// A 2a tentativa existe quando ha pelo menos uma mensagem de follow-up
+// cadastrada - a mesma regra que ja vale pra abertura: sem texto cadastrado,
+// o sistema nao manda nada e nao inventa nada. Apagar as mensagens de
+// follow-up desliga a 2a tentativa, sem precisar de outro botao pra isso.
+function followupEstaAtivo() {
+  return getConfig().mensagensFollowup.some((m) => m && m.trim());
 }
 
 // --- WhatsApps conectados ---
@@ -295,9 +322,20 @@ function upsertLead(phone, data) {
   return db.leads[phone];
 }
 
-function getActiveSequenceLeads() {
+// Todo lead com algum envio agendado: os que ainda nao receberam a abertura
+// (sequence_active) e os que ja receberam e estao com a 2a tentativa marcada
+// (aguardando_resposta com proximoEnvioEm preenchido).
+//
+// Quem responde sai de 'aguardando_resposta' no mesmo instante da resposta -
+// vira conversa_ia, human_handoff ou encerrado. E por isso que a 2a tentativa
+// nunca vai pra quem ja respondeu: nao e uma checagem a mais que alguem possa
+// esquecer de fazer, e consequencia de como o status funciona.
+function getLeadsParaEnvio() {
   const db = load();
-  return Object.values(db.leads).filter((l) => l.status === 'sequence_active');
+  return Object.values(db.leads).filter((l) =>
+    l.status === 'sequence_active'
+    || (l.status === 'aguardando_resposta' && l.proximoEnvioEm)
+  );
 }
 
 function getAllLeads() {
@@ -457,10 +495,12 @@ module.exports = {
   getConfig,
   salvarConfig,
   montarMensagemDeAbertura,
+  montarMensagemDeFollowup,
+  followupEstaAtivo,
+  getLeadsParaEnvio,
   getLead,
   getLeadFlexivel,
   upsertLead,
-  getActiveSequenceLeads,
   getAllLeads,
   iniciarSequencia,
   iniciarSequenciaEmLote,

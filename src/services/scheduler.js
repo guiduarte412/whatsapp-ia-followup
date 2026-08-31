@@ -1,17 +1,21 @@
 const cron = require('node-cron');
-const { getActiveSequenceLeads, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, getWhatsappPorId, numeroEstaBloqueado } = require('../db/store');
+const { getLeadsParaEnvio, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, montarMensagemDeFollowup, followupEstaAtivo, getWhatsappPorId, numeroEstaBloqueado } = require('../db/store');
 const { enviarMensagem, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
 
-// A esteira tem UMA mensagem so. O texto dela e sorteado entre as mensagens
-// que voce cadastrou na tela de Configuracoes - o codigo nao escreve nem
-// inventa nada. Se voce cadastrou mais de uma, cada lead recebe uma delas,
-// sorteada; isso e de proposito, mandar o texto identico pra centenas de
-// numeros e o padrao que o WhatsApp associa a spam.
+// A esteira tem no maximo DUAS mensagens: a abertura e, pra quem nao
+// respondeu, uma segunda tentativa. O texto das duas e sorteado entre as que
+// voce cadastrou na tela de Configuracoes - o codigo nao escreve nem inventa
+// nada. Se voce cadastrou mais de uma, cada lead recebe uma delas, sorteada;
+// isso e de proposito, mandar o texto identico pra centenas de numeros e o
+// padrao que o WhatsApp associa a spam.
 //
-// O objetivo dessa mensagem e abrir a conversa e levar a pessoa a agendar
+// A 2a tentativa so existe se voce cadastrar mensagens de follow-up. Sem
+// elas, o sistema manda uma mensagem e para, como sempre fez.
+//
+// O objetivo dessas mensagens e abrir a conversa e levar a pessoa a agendar
 // com voce. Se ela responder, quem assume dali em diante e a IA de conversa
-// (whatsapp-webhook.js), que segue ate marcar o horario. Se nao responder,
-// o sistema nao insiste: nao existe 2a tentativa.
+// (whatsapp-webhook.js), que segue ate marcar o horario. Depois da 2a
+// tentativa sem resposta, o sistema para de vez - nao existe 3a.
 
 function esperar(ms) {
   return new Promise((resolver) => setTimeout(resolver, ms));
@@ -39,11 +43,29 @@ function sortearIntervaloMs() {
   return (minimo + Math.random() * (maximo - minimo)) * 1000;
 }
 
-// Ja passou da hora sorteada desse lead e ele ainda nao recebeu nada?
+// Quantas mensagens esse lead pode receber no total: a abertura e, se voce
+// cadastrou mensagens de follow-up, mais uma. Nunca mais que isso.
+function totalDeTentativas() {
+  return followupEstaAtivo() ? 2 : 1;
+}
+
+// Ja passou a hora sorteada desse lead e ele ainda tem tentativa disponivel?
 function estaNaHoraDeEnviar(lead) {
-  if ((lead.attemptsSent || 0) >= 1) return false;
+  if ((lead.attemptsSent || 0) >= totalDeTentativas()) return false;
   if (!lead.proximoEnvioEm) return false;
   return Date.now() >= new Date(lead.proximoEnvioEm).getTime();
+}
+
+// Quando mandar a 2a tentativa, contando a partir de agora (o instante em
+// que a abertura saiu). Sorteado dentro da faixa configurada pelo mesmo
+// motivo do atraso inicial: se todo mundo recebesse o follow-up exatamente
+// 48h depois, os disparos voltariam a sair em bloco.
+function sortearMomentoDoFollowup() {
+  const { followupHorasMin, followupHorasMax } = getConfig().horarios;
+  const minimo = Math.max(0, Number(followupHorasMin) || 0);
+  const maximo = Math.max(minimo, Number(followupHorasMax) || minimo);
+  const horas = minimo + Math.random() * (maximo - minimo);
+  return new Date(Date.now() + horas * 60 * 60 * 1000).toISOString();
 }
 
 // A pausa entre envios e POR NUMERO, nao global. Com tres numeros
@@ -61,8 +83,9 @@ async function aguardarAVezDoNumero(chave) {
   ultimoEnvioPorNumero.set(chave, Date.now());
 }
 
-// Envia a mensagem de abertura. Devolve true se a mensagem realmente saiu -
-// e isso que diz ao ciclo se vale a pena esperar antes do proximo lead.
+// Envia a mensagem da vez - abertura ou 2a tentativa, conforme o que esse
+// lead ja recebeu. Devolve true se a mensagem realmente saiu; e isso que diz
+// ao ciclo se vale a pena esperar antes do proximo lead.
 async function processarLead(lead) {
   // O lead pode ter sido bloqueado DEPOIS de entrar na fila - pediu pra
   // parar respondendo a outra conversa, ou voce bloqueou na mao no painel.
@@ -79,11 +102,24 @@ async function processarLead(lead) {
   }
 
   const conexao = getWhatsappPorId(lead.whatsappId);
-  const mensagem = montarMensagemDeAbertura(lead.nome);
+
+  // Qual das duas mensagens e a vez desse lead. Sai pelo MESMO numero que
+  // abriu a conversa (lead.whatsappId), senao a 2a tentativa chegaria de um
+  // numero diferente do primeiro - do lado de la, duas pessoas cobrando.
+  const ehFollowup = (lead.attemptsSent || 0) >= 1;
+  const mensagem = ehFollowup
+    ? montarMensagemDeFollowup(lead.nome)
+    : montarMensagemDeAbertura(lead.nome);
 
   // Nenhuma mensagem cadastrada em Configuracoes. O sistema NAO inventa um
   // texto pra cobrir o buraco - prefere nao mandar nada e avisar voce.
+  // So vale pra abertura: pro follow-up, "sem mensagem cadastrada" quer
+  // dizer que voce nao quer 2a tentativa, e nao ha nada pra avisar.
   if (!mensagem) {
+    if (ehFollowup) {
+      upsertLead(lead.phone, { proximoEnvioEm: null });
+      return false;
+    }
     if (!lead.avisoSemMensagemEnviado) {
       upsertLead(lead.phone, { avisoSemMensagemEnviado: true });
       await avisarConsultor(
@@ -115,13 +151,23 @@ async function processarLead(lead) {
 
   appendConversa(lead.phone, { de: 'ia', texto: mensagem });
 
+  const tentativasFeitas = (lead.attemptsSent || 0) + 1;
+
+  // Agenda a 2a tentativa aqui, no instante em que a 1a saiu, em vez de
+  // decidir depois "faz tempo que mandei, mando de novo". A diferenca
+  // aparece no dia em que voce cadastra as mensagens de follow-up: com data
+  // marcada, so os leads novos entram no ciclo de duas mensagens; sem ela,
+  // todo lead antigo que nunca respondeu viraria elegivel de uma vez e o
+  // sistema dispararia a fila inteira de surpresa.
+  const agendarFollowup = tentativasFeitas < totalDeTentativas();
+
   // Mensagem entregue: sai da fila de envio e passa a esperar a resposta.
   // Nao avisa voce aqui - isso e o caminho normal, o aviso so faz sentido
   // quando tem algo pra voce fazer.
   upsertLead(lead.phone, {
-    attemptsSent: 1,
+    attemptsSent: tentativasFeitas,
     mensagensEnviadas: [...(lead.mensagensEnviadas || []), mensagem],
-    proximoEnvioEm: null,
+    proximoEnvioEm: agendarFollowup ? sortearMomentoDoFollowup() : null,
     avisoFalhaEnviado: false,
     status: 'aguardando_resposta',
   });
@@ -141,7 +187,7 @@ async function rodarCiclo() {
   cicloEmAndamento = true;
 
   try {
-    const leads = getActiveSequenceLeads();
+    const leads = getLeadsParaEnvio();
     let enviados = 0;
 
     for (const lead of leads) {
@@ -174,4 +220,4 @@ function iniciar() {
   console.log('Agendador iniciado (checagem a cada 15 min).');
 }
 
-module.exports = { iniciar, rodarCiclo, sortearIntervaloMs, estaNaHoraDeEnviar };
+module.exports = { iniciar, rodarCiclo, sortearIntervaloMs, estaNaHoraDeEnviar, totalDeTentativas };

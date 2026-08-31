@@ -39,6 +39,16 @@ function segundosValidos(valor, padrao) {
   return Math.floor(n);
 }
 
+// Espera entre a abertura e a 2a tentativa. O piso de 1 hora e proposital:
+// um follow-up minutos depois da abertura, no mesmo numero, e leitura de
+// spam na certa. O teto de 30 dias evita o erro de digitacao que agendaria
+// a mensagem pra daqui a anos.
+function horasDeFollowupValidas(valor, padrao) {
+  const n = Number(valor);
+  if (!Number.isFinite(n) || n < 1 || n > 720) return padrao;
+  return Math.floor(n);
+}
+
 // Os tokens da Z-API sao segredo: uma vez salvos, nunca voltam em claro pro
 // navegador. A tela mostra so "ja salvo" e, se o campo voltar vazio no PUT,
 // o valor guardado e mantido. Assim da pra editar o apelido de um numero sem
@@ -140,6 +150,9 @@ router.put('/config', (req, res) => {
   const mensagens = limparLista(corpo.mensagens);
   if (mensagens !== undefined) parcial.mensagens = mensagens;
 
+  const mensagensFollowup = limparLista(corpo.mensagensFollowup);
+  if (mensagensFollowup !== undefined) parcial.mensagensFollowup = mensagensFollowup;
+
   const regras = limparLista(corpo.regras);
   if (regras !== undefined) parcial.regras = regras;
 
@@ -161,6 +174,12 @@ router.put('/config', (req, res) => {
     if (intervaloMax < intervaloMin) {
       return res.status(400).json({ erro: 'o intervalo máximo entre envios precisa ser maior ou igual ao mínimo' });
     }
+    const followupMin = horasDeFollowupValidas(corpo.horarios.followupHorasMin, atual.horarios.followupHorasMin);
+    const followupMax = horasDeFollowupValidas(corpo.horarios.followupHorasMax, atual.horarios.followupHorasMax);
+    if (followupMax < followupMin) {
+      return res.status(400).json({ erro: 'a espera máxima da segunda tentativa precisa ser maior ou igual à mínima' });
+    }
+
     parcial.horarios = {
       inicio,
       fim,
@@ -168,6 +187,8 @@ router.put('/config', (req, res) => {
       atrasoMaxMinutos: atrasoMax,
       intervaloMinSegundos: intervaloMin,
       intervaloMaxSegundos: intervaloMax,
+      followupHorasMin: followupMin,
+      followupHorasMax: followupMax,
     };
   }
 

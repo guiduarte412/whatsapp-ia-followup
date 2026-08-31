@@ -17,8 +17,11 @@ pode e não pode dizer, ninguém precisa mexer em programação nem no Railway.
    minuto.
 3. Chegada a hora, sai **uma mensagem**, escolhida entre as que você
    cadastrou, com o `{nome}` já trocado pelo primeiro nome da pessoa.
-4. **Se ninguém responder, acabou.** Não existe segunda tentativa, nem
-   terceira. O sistema não insiste.
+4. **Se ninguém responder**, o sistema manda mais uma — e só mais uma —
+   dias depois, com um texto diferente do primeiro. Isso é opcional: a
+   segunda tentativa só existe se você cadastrar mensagens para ela em
+   Configurações > Mensagens. Sem elas, o sistema manda uma mensagem e para.
+   **Terceira não existe em nenhum caso.**
 5. **Se a pessoa responder**, a esteira para e a IA assume a conversa. Ela
    escreve em primeira pessoa, como se fosse você digitando, seguindo as
    regras que você cadastrou.
@@ -38,7 +41,7 @@ mandar mensagem de novo para quem já foi atendido.
 
 ## A tela de Configurações
 
-É o coração do sistema. Cinco abas:
+É o coração do sistema. Seis abas:
 
 **Identidade** — seu nome, sua empresa e uma ou duas linhas sobre o que você
 faz. A IA só pode falar do que estiver escrito aqui; o que não estiver, ela
@@ -65,6 +68,19 @@ centenas de números é justamente o padrão que o WhatsApp trata como spam. Use
 Enquanto não houver **nenhuma** mensagem cadastrada, nada é enviado — o
 sistema prefere avisar você a inventar um texto para cobrir o buraco.
 
+Na mesma aba, mais abaixo, fica a **segunda tentativa**: as mensagens para
+quem não respondeu a primeira, e quantas horas esperar antes de mandá-las
+(sorteado dentro da faixa, contado a partir da primeira mensagem). É daqui
+que costuma vir boa parte do retorno, mas só funciona com um texto
+*diferente* da abertura — reenviar "oi, tudo bem?" para o mesmo número é o
+padrão que o WhatsApp lê como spam.
+
+Deixe essa lista vazia se não quiser segunda tentativa: sem nenhuma mensagem
+ali, cada cliente recebe uma só, como antes. Ela também vale apenas para
+clientes novos — quem já recebeu a abertura antes de você cadastrar isso não
+leva uma segunda mensagem de surpresa. E quem responde, em qualquer momento,
+sai da fila: a segunda tentativa nunca chega para quem já está conversando.
+
 **Regras** — o que a IA pode e não pode fazer quando o cliente responde. Uma
 regra por caixa, escrita do jeito que você falaria ("nunca informe preço por
 mensagem", "se perguntarem sobre prazo, me passe a conversa"). Ela segue
@@ -74,15 +90,28 @@ todas, sem exceção.
 Brasília), a faixa de espera entre o cliente entrar e a mensagem sair, a pausa
 entre um envio e o próximo, e o teto de respostas automáticas seguidas.
 
+**Bloqueios** — os números que pediram para não receber mais mensagens. Um
+número nessa lista não recebe nada por nenhum caminho: não entra na esteira,
+não recebe resposta da IA e não volta nem se aparecer de novo numa planilha
+importada. O sistema adiciona sozinho quando a pessoa pede pelo WhatsApp —
+tanto pelo texto ("me tira dessa lista") quanto pelo que a IA identifica —
+e você pode bloquear na mão quando o pedido chegar por outro canal. Nessa
+aba as ações valem na hora, sem passar pelo botão Salvar.
+
+Quem pede para sair recebe **uma** confirmação curta e nada mais. No quadro
+de leads ele aparece na coluna "Pediu pra parar", para você não perder de
+vista o que aconteceu.
+
 ## Por que existem tantas esperas
 
-Três controles diferentes, cada um resolvendo um problema:
+Quatro controles diferentes, cada um resolvendo um problema:
 
 | Controle | Para quê |
 |---|---|
 | Janela de horário (8h–20h) | Nada sai de madrugada |
 | Espera antes do envio (30–60 min) | Quem entra junto não recebe junto |
 | Pausa entre envios (20–60 s) | Uma planilha grande não vira rajada |
+| Espera da 2ª tentativa (48–72 h) | O follow-up não soa como cobrança |
 
 A pausa entre envios é a mais importante quando você importa muita gente de
 uma vez. Sem ela, 200 linhas viram 200 mensagens emendadas — o comportamento
@@ -136,7 +165,7 @@ dígitos (padrão `059597`).
 - **Testar mensagem** — três abas: mandar a mensagem para um número seu,
   criar um cliente de teste e conversar de verdade pelo WhatsApp, ou simular
   a conversa inteira na tela sem tocar em nada.
-- **Configurações** — as cinco abas descritas acima.
+- **Configurações** — as seis abas descritas acima.
 - **Métricas** — total, taxa de retorno, reuniões marcadas e quantos ainda não
   responderam.
 - **Relatório diário** — resumo de um dia, exportável em Excel ou impresso.
@@ -200,13 +229,23 @@ já sabe usar um Volume automaticamente, mas ele precisa ser criado uma vez:
 - Os tokens da Z-API, uma vez salvos, nunca voltam para o navegador. A tela
   mostra só "já salvo"; salvar com o campo em branco mantém o que estava
   guardado.
-- Os webhooks ficam fora dessa proteção de propósito — vêm de fora e não têm
-  como mandar token.
-- A palavra-chave que autoriza trocar o código de acesso é fixa no código do
-  servidor e nunca chega ao navegador.
+- Os webhooks ficam fora dessa proteção porque vêm de fora e não têm como
+  mandar token. Para fechar essa porta, defina `ZAPI_WEBHOOK_SEGREDO` e
+  acrescente `?segredo=<o valor>` no fim da URL que você cola na Z-API. Sem
+  a variável, o webhook aceita qualquer chamada.
+- A palavra-chave que autoriza trocar o código de acesso vem de
+  `PALAVRA_CHAVE_MESTRA`. **Enquanto ela não estiver configurada**, trocar o
+  código exige uma sessão já aberta — porque o valor padrão está no
+  código-fonte, que é público, e sozinho ele não pode valer nada.
+
+**Faça estas três coisas antes de usar para valer:** troque o código de
+acesso padrão (ele está no código-fonte), defina `PALAVRA_CHAVE_MESTRA` e
+defina `ZAPI_WEBHOOK_SEGREDO`.
 
 Isso não substitui os cuidados de LGPD: são dados de pessoas reais. Limite
-quem tem o código e troque-o quando alguém sair da equipe.
+quem tem o código e troque-o quando alguém sair da equipe. Vale também
+registrar de onde veio cada contato — numa reclamação, é a primeira coisa
+perguntada, e a planilha importada não responde isso sozinha.
 
 ## Aviso importante sobre bloqueio
 
@@ -218,6 +257,12 @@ variação de texto e rodízio entre números.
 
 Mesmo assim o risco existe. Vale usar um número dedicado, separado do seu
 WhatsApp principal.
+
+Se você ligar a segunda tentativa, lembre que ela **dobra** o volume por
+número: a mesma lista passa a gerar duas mensagens por pessoa em vez de uma.
+O que segura o risco é o espaçamento — dias entre a primeira e a segunda, com
+texto diferente. Encurtar essa espera para poucas horas desfaz a proteção e
+transforma o follow-up em cobrança, que é o que faz a pessoa denunciar.
 
 ## Sobre a IA "aprender"
 
@@ -251,16 +296,17 @@ src/
     whatsapp.js              # envio pela Z-API, um ou vários números
     media.js                 # imagem/figurinha/áudio viram texto
     openai.js                # transcrição de áudio
+    optout.js                # reconhece "não me manda mais mensagem"
     sessao.js                # tokens de sessão e bloqueio de força bruta
     scheduler.js             # a esteira: quando e em que ritmo enviar
   db/
-    store.js                 # leads, configuração e telefone brasileiro
+    store.js                 # leads, configuração, bloqueios e telefone brasileiro
 public/
   index.html                 # o site inteiro
   app.js                     # toda a lógica da tela
   estilo.css                 # identidade visual
 data/
-  db.json                    # o "banco de dados", um arquivo só
+  db.json                    # o "banco de dados", um arquivo só (fora do Git)
 ```
 
 Não existe integração com CRM nem com o Google Agenda. O agendamento termina

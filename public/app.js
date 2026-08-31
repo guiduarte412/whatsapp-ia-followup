@@ -183,6 +183,18 @@ async function garantirWhatsappsConhecidos() {
   return whatsappsConhecidos;
 }
 
+// Quem já recebeu a abertura e ainda tem a segunda tentativa marcada. Sem
+// isso, o quadro mostraria "Mensagem enviada" tanto pra quem ainda vai
+// receber outra quanto pra quem já recebeu tudo - e são situações
+// diferentes na hora de decidir se você entra na conversa na mão.
+function followupAgendado(lead) {
+  if (!lead.proximoEnvioEm || !(lead.attemptsSent >= 1)) return null;
+  const quando = new Date(lead.proximoEnvioEm);
+  if (Number.isNaN(quando.getTime())) return null;
+  const dia = quando.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  return `2ª msg ${dia}`;
+}
+
 function apelidoDoWhatsapp(id) {
   if (!id) return null;
   const encontrado = (whatsappsConhecidos || []).find((w) => w.id === id);
@@ -254,10 +266,12 @@ function renderizarQuadro() {
         <div class="coluna-cartoes">
           ${cartoes.length ? cartoes.map((lead) => {
             const apelido = apelidoDoWhatsapp(lead.whatsappId);
+            const followup = followupAgendado(lead);
             return `
             <a class="cartao-lead" href="#lead/${encodeURIComponent(lead.phone)}">
               <span class="nome">${escaparTexto(lead.nome || '—')}${lead.teste ? '<span class="selo-teste">TESTE</span>' : ''}</span>
               <span class="telefone">${escaparTexto(lead.phone)}</span>
+              ${followup ? `<span class="aviso-followup">${escaparTexto(followup)}</span>` : ''}
               ${apelido ? `<span class="etiqueta-whatsapp">${escaparTexto(apelido)}</span>` : ''}
             </a>
           `;
@@ -790,6 +804,11 @@ const LISTAS_CONFIG = {
     rotulo: 'Mensagem',
     vazio: 'Nenhuma mensagem cadastrada. Enquanto não houver pelo menos uma, nada é enviado pra ninguém.',
   },
+  'cfg-followup': {
+    container: 'cfg-followups',
+    rotulo: 'Segunda tentativa',
+    vazio: 'Nenhuma mensagem de segunda tentativa. Cada lead recebe uma mensagem só e o sistema não insiste.',
+  },
   'cfg-regra': {
     container: 'cfg-regras',
     rotulo: 'Regra',
@@ -1145,7 +1164,11 @@ async function carregarConfig() {
 
   renderizarWhatsapps(cfg.whatsapps || []);
   renderizarLista('cfg-mensagem', cfg.mensagens);
+  renderizarLista('cfg-followup', cfg.mensagensFollowup || []);
   renderizarLista('cfg-regra', cfg.regras);
+
+  document.getElementById('cfg-followup-min').value = cfg.horarios.followupHorasMin;
+  document.getElementById('cfg-followup-max').value = cfg.horarios.followupHorasMax;
 
   document.getElementById('cfg-hora-inicio').value = cfg.horarios.inicio;
   document.getElementById('cfg-hora-fim').value = cfg.horarios.fim;
@@ -1174,6 +1197,10 @@ document.querySelectorAll('#abas-config .aba').forEach((aba) => {
 
 document.getElementById('btn-add-mensagem').addEventListener('click', () => {
   renderizarLista('cfg-mensagem', [...valoresDe('cfg-mensagem'), '']);
+});
+
+document.getElementById('btn-add-followup').addEventListener('click', () => {
+  renderizarLista('cfg-followup', [...valoresDe('cfg-followup'), '']);
 });
 
 document.getElementById('btn-add-regra').addEventListener('click', () => {
@@ -1237,6 +1264,7 @@ document.getElementById('btn-salvar-config').addEventListener('click', async () 
       contexto: document.getElementById('cfg-contexto').value.trim(),
     },
     mensagens: valoresDe('cfg-mensagem').filter((t) => t.trim()),
+    mensagensFollowup: valoresDe('cfg-followup').filter((t) => t.trim()),
     regras: valoresDe('cfg-regra').filter((t) => t.trim()),
     horarios: {
       inicio: Number(document.getElementById('cfg-hora-inicio').value),
@@ -1245,6 +1273,8 @@ document.getElementById('btn-salvar-config').addEventListener('click', async () 
       atrasoMaxMinutos: Number(document.getElementById('cfg-atraso-max').value),
       intervaloMinSegundos: Number(document.getElementById('cfg-intervalo-min').value),
       intervaloMaxSegundos: Number(document.getElementById('cfg-intervalo-max').value),
+      followupHorasMin: Number(document.getElementById('cfg-followup-min').value),
+      followupHorasMax: Number(document.getElementById('cfg-followup-max').value),
     },
     maxRespostasAutomaticas: Number(document.getElementById('cfg-max-respostas').value),
   };
@@ -1263,10 +1293,16 @@ document.getElementById('btn-salvar-config').addEventListener('click', async () 
     }
     renderizarWhatsapps(dados.whatsapps || []);
     renderizarLista('cfg-mensagem', dados.mensagens);
+    renderizarLista('cfg-followup', dados.mensagensFollowup || []);
     renderizarLista('cfg-regra', dados.regras);
     // Renomear um número precisa aparecer no quadro sem recarregar a página.
     whatsappsConhecidos = (dados.whatsapps || []).map((w) => ({ id: w.id, apelido: w.apelido || w.id }));
-    sucesso.textContent = `Salvo — ${(dados.whatsapps || []).filter((w) => w.ativo).length} número(s) ativo(s), ${dados.mensagens.length} mensagem(ns) e ${dados.regras.length} regra(s).`;
+    const qtdFollowup = (dados.mensagensFollowup || []).length;
+    sucesso.textContent = `Salvo — ${(dados.whatsapps || []).filter((w) => w.ativo).length} número(s) ativo(s), `
+      + `${dados.mensagens.length} mensagem(ns) de abertura, ${dados.regras.length} regra(s). `
+      + (qtdFollowup
+        ? `Segunda tentativa ligada, com ${qtdFollowup} mensagem(ns).`
+        : 'Sem segunda tentativa — cada lead recebe uma mensagem só.');
     sucesso.style.display = 'block';
     setTimeout(() => { sucesso.style.display = 'none'; }, 3000);
   } catch (falha) {

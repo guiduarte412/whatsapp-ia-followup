@@ -410,6 +410,16 @@ h2 {
   border-radius: 10px;
 }
 
+/* Segunda tentativa a caminho: informação de agenda, não de status - por
+   isso fica em texto simples, sem pílula, pra não competir com o número. */
+.cartao-lead .aviso-followup {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--texto-fraco);
+}
+
 /* --- Conexão do WhatsApp (QR Code na tela de Configurações) --- */
 
 .wa-conexao {
