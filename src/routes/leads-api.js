@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead, upsertLead, normalizarTelefoneBR } = require('../db/store');
+const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead, upsertLead, normalizarTelefoneBR, getWhatsappPorId } = require('../db/store');
 
 const router = express.Router();
 router.use(express.json({ limit: '2mb' }));
@@ -57,6 +57,25 @@ router.post('/leads/lote', (req, res) => {
 router.delete('/leads/:telefone', (req, res) => {
   removerLead(req.params.telefone);
   res.status(204).end();
+});
+
+// Define (ou troca) o numero responsavel por um lead.
+//
+// Existe por causa dos leads antigos: o numero e fixado quando o lead entra
+// na esteira, entao todo mundo que entrou antes de voce cadastrar os numeros
+// ficou sem dono - e sem dono eles nao aparecem em nenhum filtro por numero.
+// Sem esta rota, a unica saida seria apagar e recadastrar cada um, perdendo
+// a conversa.
+router.post('/leads/:telefone/whatsapp', (req, res) => {
+  const lead = getLead(req.params.telefone);
+  if (!lead) return res.status(404).json({ erro: 'lead nao encontrado' });
+
+  const whatsappId = req.body?.whatsappId || null;
+  if (whatsappId && !getWhatsappPorId(whatsappId)) {
+    return res.status(400).json({ erro: 'esse número não está cadastrado em Configurações > WhatsApps' });
+  }
+
+  res.json(upsertLead(req.params.telefone, { whatsappId }));
 });
 
 // Forma garantida de encerrar o atendimento automatico - nao depende de

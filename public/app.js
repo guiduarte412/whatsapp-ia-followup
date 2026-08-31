@@ -205,20 +205,39 @@ function apelidoDoWhatsapp(id) {
 
 // O <select> so aparece com dois ou mais numeros cadastrados - com um (ou
 // nenhum) ele nao filtra nada.
+// Marcador dos leads que não pertencem a número nenhum. Eles existem de
+// verdade: todo lead criado antes de você cadastrar os números ficou sem
+// dono, porque o número é fixado no momento em que o lead entra na esteira.
+// Sem uma opção pra eles, ficariam invisíveis em qualquer filtro - você
+// cadastraria os dois números e a maior parte da base não apareceria em
+// nenhum dos dois.
+const SEM_NUMERO = '__sem_numero__';
+
 function atualizarFiltroDeWhatsapp() {
   const filtro = document.getElementById('filtro-whatsapp');
   const numeros = whatsappsConhecidos || [];
-  if (numeros.length < 2) {
+  const temLeadSemNumero = todosOsLeads.some((l) => !l.whatsappId);
+
+  // O filtro só serve se houver mais de um grupo pra separar. Um número
+  // sozinho, sem leads órfãos, não separa nada.
+  const grupos = numeros.length + (temLeadSemNumero ? 1 : 0);
+  if (grupos < 2) {
     filtro.style.display = 'none';
     filtro.value = '';
     return;
   }
+
   const selecionado = filtro.value;
-  filtro.innerHTML = '<option value="">Todos os números</option>' +
-    numeros.map((w) => `<option value="${escaparAtributo(w.id)}">${escaparTexto(w.apelido)}</option>`).join('');
+  filtro.innerHTML = '<option value="">Todos os números</option>'
+    + numeros.map((w) => `<option value="${escaparAtributo(w.id)}">${escaparTexto(w.apelido)}</option>`).join('')
+    + (temLeadSemNumero ? `<option value="${SEM_NUMERO}">Sem número definido</option>` : '');
+
   // Preserva a escolha entre as atualizacoes automaticas do quadro; se o
   // numero escolhido sumiu da configuracao, volta pra "Todos".
-  filtro.value = numeros.some((w) => w.id === selecionado) ? selecionado : '';
+  const aindaExiste = selecionado === SEM_NUMERO
+    ? temLeadSemNumero
+    : numeros.some((w) => w.id === selecionado);
+  filtro.value = aindaExiste ? selecionado : '';
   filtro.style.display = 'block';
 }
 
@@ -249,7 +268,8 @@ function renderizarQuadro() {
         (termoDigitos && l.phone.includes(termoDigitos)) ||
         (l.nome || '').toLowerCase().includes(termoCru))
     : todosOsLeads;
-  if (whatsappEscolhido) leads = leads.filter((l) => l.whatsappId === whatsappEscolhido);
+  if (whatsappEscolhido === SEM_NUMERO) leads = leads.filter((l) => !l.whatsappId);
+  else if (whatsappEscolhido) leads = leads.filter((l) => l.whatsappId === whatsappEscolhido);
 
   if (!todosOsLeads.length) {
     quadro.innerHTML = '<div class="vazio">Nenhum lead ainda. Adicione o primeiro depois de uma ligação sem retorno.</div>';
@@ -598,6 +618,50 @@ function formatarHora(iso) {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+// Seletor do número responsável. Só aparece quando há números cadastrados -
+// no modo de um número só (credenciais nas variáveis de ambiente) não há o
+// que escolher.
+async function montarSeletorDeNumero(lead) {
+  const area = document.getElementById('lead-numero-area');
+  const select = document.getElementById('lead-whatsapp');
+  const dica = document.getElementById('lead-numero-dica');
+
+  const numeros = await garantirWhatsappsConhecidos();
+  if (!numeros.length) {
+    area.style.display = 'none';
+    return;
+  }
+
+  select.innerHTML = '<option value="">Sem número definido</option>'
+    + numeros.map((w) => `<option value="${escaparAtributo(w.id)}">${escaparTexto(w.apelido)}</option>`).join('');
+  select.value = numeros.some((w) => w.id === lead.whatsappId) ? lead.whatsappId : '';
+
+  dica.textContent = lead.whatsappId && !numeros.some((w) => w.id === lead.whatsappId)
+    ? 'O número que atendia esse lead foi removido da configuração. Escolha outro.'
+    : 'É por esse número que as mensagens desse lead saem. Leads antigos entraram antes de você cadastrar os números, por isso ficam sem um.';
+
+  select.onchange = async () => {
+    const anterior = select.value;
+    try {
+      const resp = await api(`/api/leads/${encodeURIComponent(lead.phone)}/whatsapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ whatsappId: select.value || null }),
+      });
+      const corpo = await resp.json();
+      if (!resp.ok) throw new Error(corpo.erro || 'não consegui salvar');
+      dica.textContent = select.value
+        ? `Pronto — esse lead agora é do ${numeros.find((w) => w.id === select.value).apelido}.`
+        : 'Pronto — esse lead ficou sem número definido.';
+    } catch (erro) {
+      select.value = anterior;
+      dica.textContent = `Não consegui salvar: ${erro.message}`;
+    }
+  };
+
+  area.style.display = 'block';
+}
+
 async function carregarDetalheLead(telefone) {
   const resp = await api(`/api/leads/${encodeURIComponent(telefone)}`);
   if (!resp.ok) {
@@ -611,6 +675,8 @@ async function carregarDetalheLead(telefone) {
     <span class="status ${escaparAtributo(lead.status)}"><span class="ponto"></span>${escaparTexto(LABELS_STATUS[lead.status] || lead.status)}</span>
     &nbsp;·&nbsp; <span style="font-family: var(--font-mono); font-size: 13px;">${escaparTexto(lead.phone)}</span>
   `;
+
+  montarSeletorDeNumero(lead);
 
   const conversaDiv = document.getElementById('lead-conversa');
   const mensagensSequencia = (lead.mensagensEnviadas || []).map((texto) => ({ de: 'ia', texto, timestamp: null }));
