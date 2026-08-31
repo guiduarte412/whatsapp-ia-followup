@@ -4,8 +4,15 @@ const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerL
 const router = express.Router();
 router.use(express.json({ limit: '2mb' }));
 
+// "?resumo=1" devolve os leads sem o histórico de conversa. O quadro se
+// recarrega sozinho a cada 30s e não usa nada disso - mandar a conversa
+// inteira de todo mundo nessa frequência é o que faz o painel ficar pesado
+// conforme a base cresce. O relatório e as métricas, que precisam das
+// mensagens, continuam pedindo a versão completa.
 router.get('/leads', (req, res) => {
-  res.json(getAllLeads());
+  const leads = getAllLeads();
+  if (req.query.resumo !== '1') return res.json(leads);
+  res.json(leads.map(({ conversa, mensagensEnviadas, ...resto }) => resto));
 });
 
 router.get('/leads/:telefone', (req, res) => {

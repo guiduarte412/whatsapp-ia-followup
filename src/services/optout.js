@@ -41,10 +41,13 @@ const PADROES = [
   /(sai[ar]?|me tir[ae])[^.!?]{0,15}\bda (sua |tua )?lista/,
   /remov[ae][^.!?]{0,20}\b(meu|esse|este) (numero|contato)/,
   /tir[ae][^.!?]{0,20}\b(meu|esse|este) (numero|contato)\b[^.!?]{0,20}(lista|cadastro|base)?/,
-  // Descadastro explicito
+  // Descadastro explicito. "cancelar inscricao/cadastro" ficou de fora de
+  // proposito: numa conversa de venda, isso costuma ser sobre um servico
+  // ("cancela minha inscricao no curso"), nao sobre parar de receber
+  // mensagem. Quando for pedido de saida mesmo, a IA sinaliza.
   /descadastr/,
   /desinscrev/,
-  /cancel[ae][^.!?]{0,15}(inscricao|cadastro|envio|recebimento)/,
+  /cancel[ae][^.!?]{0,15}(envio|recebimento|as mensagens|essas mensagens)/,
   // "chega de mensagem", "não quero mais contato"
   /chega de (mensagem|mensagens|msg)/,
   /nao quer[oa] (mais )?(nenhum )?contato/,
@@ -57,12 +60,43 @@ const PADROES = [
   /^(stop|sair|parar)$/,
 ];
 
-// Devolve true so quando o texto contem um pedido claro. Na duvida, false -
-// a IA ainda pode sinalizar no turno seguinte.
+// Pedidos PARCIAIS, que se parecem com os de cima mas nao sao pedido de
+// saida - a pessoa esta escolhendo canal, formato ou corrigindo cadastro, e
+// segue querendo falar com voce:
+//
+//   "nao me manda mais audio, prefiro texto"
+//   "para de enviar pelo email, manda aqui"
+//   "me tira da lista de espera e ja marca logo"
+//   "remove meu numero antigo do cadastro e poe esse novo"
+//
+// Bloquear qualquer uma dessas tiraria um lead BOM da esteira pra sempre, e
+// ninguem perceberia. Quando uma delas aparece, a decisao fica com a IA, que
+// le a frase inteira em vez de procurar pedaco.
+const QUALIFICADORES = [
+  // canal ou formato especifico, nao "mensagem" em geral
+  /\b(audio|audios|ligacao|ligacoes|email|e-mail|telefonema|video|videos|foto|fotos|print|prints|sms|carta)\b/,
+  // "mais de uma por vez" nao e "nao me manda mais"
+  /\bmais de (uma|um|dois|duas|tres|\d+)\b/,
+  // lista de espera nao e a lista de disparo
+  /\blista de espera\b/,
+  // correcao de cadastro: trocar um numero pelo outro
+  /\b(antigo|antiga)\b/,
+  /\b(poe|poem|coloca|cadastra|usa|use)\b[^.!?]{0,15}\b(esse|este|o novo|meu novo)\b/,
+  // ja resolveu em outro lugar
+  /\b(outro|outra) (sistema|empresa|lista|cadastro|numero)\b/,
+  // ressalva que devolve o contato: "mas mensagem pode", "mas a sua eu quero"
+  /\b(mas|porem|so que)\b[^.!?]{0,40}\b(pode|quero|prefiro|manda|envia|continua|sim)\b/,
+  /\bprefiro\b/,
+];
+
+// Devolve true so quando o texto contem um pedido claro e sem ressalva. Na
+// duvida, false - a IA ainda sinaliza no turno seguinte, e um bloqueio
+// adiado por um turno custa muito menos que um lead bloqueado por engano.
 function pediuParaParar(texto) {
   const limpo = normalizar(texto);
   if (!limpo) return false;
-  return PADROES.some((padrao) => padrao.test(limpo));
+  if (!PADROES.some((padrao) => padrao.test(limpo))) return false;
+  return !QUALIFICADORES.some((excecao) => excecao.test(limpo));
 }
 
 // Resposta unica de confirmacao. Ficar em silencio faria a pessoa achar que

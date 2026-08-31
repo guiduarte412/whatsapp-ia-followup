@@ -38,6 +38,10 @@ function credenciais(conexao) {
 const enviadasPorNos = new Map();
 const JANELA_ECO_MS = 5 * 60 * 1000;
 
+// Teto de espera pra mandar uma mensagem. Generoso pra nao cortar um envio
+// que so esta lento, mas finito.
+const TIMEOUT_ENVIO_MS = 30_000;
+
 function chaveDaMensagem(texto) {
   return (texto || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -63,7 +67,11 @@ async function enviarMensagem(telefone, mensagem, conexao) {
     return await axios.post(
       `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`,
       { phone: telefone, message: mensagem },
-      { headers: { 'Client-Token': clientToken } }
+      // Sem timeout, uma Z-API que aceita a conexao e nunca responde deixa
+      // esta chamada pendurada pra sempre. No agendador isso e fatal: o
+      // ciclo trava com a trava "cicloEmAndamento" ligada, e o sistema para
+      // de enviar pra TODO mundo ate alguem reiniciar o servidor.
+      { headers: { 'Client-Token': clientToken }, timeout: TIMEOUT_ENVIO_MS }
     );
   } catch (erro) {
     // A mensagem padrao do axios ("Request failed with status code 400")

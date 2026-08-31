@@ -398,8 +398,29 @@ function removerLead(phone) {
 
 // Cria varios leads de uma vez (usado na importacao de Excel). Retorna
 // quantos entraram certo e quais linhas deram erro, pra mostrar no site.
+// Uma leitura e uma gravacao pro lote inteiro, em vez de uma por linha.
+//
+// Chamar iniciarSequencia linha a linha fazia cada uma reler e reescrever o
+// banco INTEIRO: com mil linhas sao mil leituras e mil gravacoes de um
+// arquivo que so cresce. E como fs.readFileSync/writeFileSync sao
+// sincronos, o Node fica travado o tempo todo - o servidor para de
+// responder a tudo, inclusive aos webhooks de quem esta respondendo naquele
+// momento, e a Z-API desiste de entregar. Medido antes desta mudanca: ~16
+// segundos de servidor congelado para importar mil linhas.
 function iniciarSequenciaEmLote(linhas) {
   const resultado = { criados: 0, duplicados: 0, bloqueados: 0, erros: [] };
+
+  const db = load();
+  if (!db.bloqueados || typeof db.bloqueados !== 'object') db.bloqueados = {};
+
+  const ativos = (db.config.whatsapps || []).filter((w) => w.ativo !== false && w.instanceId && w.token);
+  const { atrasoMinMinutos, atrasoMaxMinutos } = db.config.horarios;
+  const minimo = Math.max(0, Number(atrasoMinMinutos) || 0);
+  const maximo = Math.max(minimo, Number(atrasoMaxMinutos) || minimo);
+
+  const ponteiroInicial = Number(db.ultimoWhatsappIndice) || 0;
+  let ponteiro = ponteiroInicial;
+
   linhas.forEach((linha, indice) => {
     const telefone = normalizarTelefoneBR(linha.telefone);
     if (!telefone) {
@@ -410,14 +431,55 @@ function iniciarSequenciaEmLote(linhas) {
       resultado.erros.push({ linha: indice + 1, motivo: 'nome vazio' });
       return;
     }
-    const lead = iniciarSequencia(telefone, { nome: linha.nome });
+
+    // Mesmas regras do cadastro avulso, aplicadas sobre o banco em memoria.
+    const variantes = variantesTelefoneBR(telefone);
     // Contado separado dos erros: nao e problema na planilha, e o sistema
-    // respeitando quem pediu pra sair. Aparece no aviso da importacao pra
-    // voce saber que a linha foi vista e deixada de fora de proposito.
-    if (lead.bloqueado) resultado.bloqueados += 1;
-    else if (lead.jaExistia) resultado.duplicados += 1;
-    else resultado.criados += 1;
+    // respeitando quem pediu pra sair.
+    if (variantes.some((v) => db.bloqueados[v])) {
+      resultado.bloqueados += 1;
+      return;
+    }
+    // Pega tambem o telefone repetido dentro da propria planilha, porque o
+    // anterior ja foi escrito em db.leads nesta mesma passada.
+    if (variantes.some((v) => db.leads[v])) {
+      resultado.duplicados += 1;
+      return;
+    }
+
+    let whatsapp = null;
+    if (ativos.length) {
+      const posicao = ponteiro % ativos.length;
+      whatsapp = ativos[posicao];
+      ponteiro = posicao + 1;
+    }
+
+    const agora = new Date();
+    const atrasoMs = (minimo + Math.random() * (maximo - minimo)) * 60_000;
+
+    db.leads[telefone] = {
+      phone: telefone,
+      nome: linha.nome,
+      teste: false,
+      whatsappId: whatsapp ? whatsapp.id : null,
+      status: 'sequence_active',
+      sequenceStartedAt: agora.toISOString(),
+      attemptsSent: 0,
+      mensagensEnviadas: [],
+      respostasAutomaticas: 0,
+      conversa: [],
+      proximoEnvioEm: new Date(agora.getTime() + atrasoMs).toISOString(),
+    };
+    resultado.criados += 1;
   });
+
+  // Grava so se algo mudou. O ponteiro do rodizio anda junto, pra proxima
+  // importacao continuar de onde esta em vez de recomecar no primeiro numero.
+  if (resultado.criados || ponteiro !== ponteiroInicial) {
+    db.ultimoWhatsappIndice = ponteiro;
+    save(db);
+  }
+
   return resultado;
 }
 

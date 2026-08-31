@@ -92,18 +92,36 @@ router.post('/testar-whatsapp', async (req, res) => {
 
   try {
     const lead = iniciarSequencia(telefone, { nome, teste: true });
+
+    // Testar num numero que ja e lead REAL destruiria o atendimento dele: a
+    // gravacao abaixo zera as mensagens enviadas, joga o status de volta pra
+    // "aguardando resposta" e ainda manda uma abertura pra alguem que talvez
+    // esteja no meio de uma conversa. Repetir o teste num numero que ja e
+    // lead de TESTE continua valendo - ai e so recomecar o teste do zero.
+    if (lead.jaExistia && !lead.teste) {
+      return res.status(400).json({
+        erro: 'esse número já é um lead de verdade no sistema. Use outro número pra testar, '
+          + 'senão o teste apaga a conversa e o histórico dele.',
+      });
+    }
+
     // Pelo numero que o rodizio fixou nesse lead - e ele que vai receber a
     // resposta no webhook, entao a abertura precisa sair por ele tambem.
     await enviarMensagem(telefone, texto, getWhatsappPorId(lead.whatsappId));
-    appendConversa(telefone, { de: 'ia', texto });
-    // A unica mensagem da esteira ja saiu aqui - o lead vai direto pra
-    // espera de resposta, sem nada agendado depois.
+
+    // Teste repetido comeca limpo: sem zerar a conversa, o historico do teste
+    // anterior continuaria no prompt e a IA responderia como se a conversa
+    // nunca tivesse recomecado.
     upsertLead(telefone, {
       attemptsSent: 1,
       mensagensEnviadas: [texto],
+      conversa: [],
+      respostasAutomaticas: 0,
+      motivoEncerramento: null,
       proximoEnvioEm: null,
       status: 'aguardando_resposta',
     });
+    appendConversa(telefone, { de: 'ia', texto });
     res.json({ texto, lead });
   } catch (erro) {
     res.status(500).json({ erro: erro.message || 'falha ao iniciar teste no WhatsApp' });

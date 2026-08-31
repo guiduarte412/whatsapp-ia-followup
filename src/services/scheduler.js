@@ -196,6 +196,18 @@ async function rodarCiclo() {
       // envios" no meio dele.
       if (getPausado()) break;
       if (!dentroDoHorarioPermitido()) break;
+
+      // Lead que ja gastou todas as tentativas mas continua com data
+      // marcada: acontece quando a 2a tentativa e desligada depois de ja
+      // ter agendado gente. Limpar aqui resolve dois problemas de uma vez -
+      // o cartao para de anunciar uma mensagem que nao vai sair, e religar
+      // a 2a tentativa mais tarde nao dispara de uma vez a fila inteira de
+      // leads com data vencida.
+      if (lead.proximoEnvioEm && (lead.attemptsSent || 0) >= totalDeTentativas()) {
+        upsertLead(lead.phone, { proximoEnvioEm: null });
+        continue;
+      }
+
       if (!estaNaHoraDeEnviar(lead)) continue;
 
       // Espera so o que faltar pro NUMERO desse lead poder mandar de novo.

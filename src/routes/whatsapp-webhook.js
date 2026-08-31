@@ -199,6 +199,17 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
     return res.status(200).json({ ok: true, bloqueado: true });
   }
 
+  // Respondeu: a esteira acabou pra esse lead, entao a 2a tentativa que
+  // estava marcada perde a validade agora. Nao basta o status mudar - o
+  // proximoEnvioEm continuaria gravado, e ai o cartao no quadro anunciaria
+  // uma "2a msg" que nunca vai sair. Pior: se a 2a tentativa for desligada e
+  // religada depois, todo lead com data velha pendurada viraria elegivel de
+  // uma vez e a fila inteira dispararia junta.
+  //
+  // Vale tambem pra quem escreve ANTES da abertura sair: se a pessoa ja
+  // puxou conversa, mandar a mensagem de abertura depois nao faz sentido.
+  if (lead.proximoEnvioEm) upsertLead(telefoneLead, { proximoEnvioEm: null });
+
   // Pedido de descadastro escrito com todas as letras. Resolvido aqui, antes
   // da IA: quem pediu pra parar nao precisa esperar um modelo concordar, e
   // nao ha por que gastar credito interpretando "me tira dessa lista".

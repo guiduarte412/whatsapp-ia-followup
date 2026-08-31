@@ -226,7 +226,9 @@ async function carregarLeads() {
   const quadro = document.getElementById('quadro');
   try {
     await garantirWhatsappsConhecidos();
-    const resp = await api('/api/leads');
+    // Sem o histórico de conversa: o quadro não mostra mensagem nenhuma, e
+    // é ele que fica recarregando a cada 30 segundos.
+    const resp = await api('/api/leads?resumo=1');
     todosOsLeads = await resp.json();
     atualizarFiltroDeWhatsapp();
     renderizarQuadro();
@@ -321,7 +323,8 @@ document.getElementById('btn-pausa').addEventListener('click', async () => {
 });
 
 document.getElementById('btn-exportar').addEventListener('click', async () => {
-  const resp = await api('/api/leads');
+  // A planilha exportada também não leva as conversas, só os dados do lead.
+  const resp = await api('/api/leads?resumo=1');
   const leads = await resp.json();
   const linhas = leads.map((l) => ({
     Nome: l.nome || '',
@@ -925,7 +928,7 @@ function renderizarWhatsapps(lista) {
         Ativo (entra no rodízio e recebe leads novos)
       </label>
       ${w.id
-        ? `<p class="dica">Webhook desse número — cole na Z-API em "ao receber mensagem":<br><code style="word-break:break-all;">${location.origin}/webhooks/whatsapp/${w.id}</code></p>`
+        ? `<p class="dica">Webhook desse número — cole na Z-API em "ao receber mensagem":<br><code style="word-break:break-all;">${location.origin}/webhooks/whatsapp/${escaparTexto(w.id)}</code></p>`
         : '<p class="dica">Salve pra gerar a URL de webhook desse número.</p>'}
       ${w.id
         ? blocoDeConexao(w.id)
@@ -968,6 +971,7 @@ async function atualizarStatusConexao(id) {
     const resp = await api(`/api/whatsapps/${encodeURIComponent(id)}/status`);
     const dados = await resp.json();
     if (!resp.ok) throw new Error(dados.erro || 'falha ao consultar o status');
+    statusConhecido.set(id, dados);
     mostrarStatus(bloco, dados);
     return dados;
   } catch (erro) {
@@ -976,9 +980,22 @@ async function atualizarStatusConexao(id) {
   }
 }
 
+// Último status conhecido de cada número, pra sobreviver aos re-renders.
+// A lista de números é redesenhada a cada "+ Adicionar", cada "Remover" e
+// cada "Salvar"; sem esse cache, cada um desses cliques dispararia de novo
+// uma consulta à Z-API por número cadastrado, e a tela voltaria a piscar
+// "Verificando conexão…" para status que já eram conhecidos.
+const statusConhecido = new Map();
+
 function verificarStatusDosCartoes() {
   document.querySelectorAll('.wa-conexao').forEach((bloco) => {
-    atualizarStatusConexao(bloco.dataset.conexao);
+    const id = bloco.dataset.conexao;
+    const jaSabido = statusConhecido.get(id);
+    if (jaSabido) {
+      mostrarStatus(bloco, jaSabido);
+      return;
+    }
+    atualizarStatusConexao(id);
   });
 }
 
@@ -1153,6 +1170,11 @@ document.getElementById('btn-bloquear-numero').addEventListener('click', async (
 });
 
 async function carregarConfig() {
+  // Entrar na tela sempre consulta a Z-API de novo: o número pode ter caído
+  // desde a última vez que você olhou. O cache serve só pros re-renders de
+  // dentro da própria tela.
+  statusConhecido.clear();
+
   const resp = await api('/api/config');
   const cfg = await resp.json();
 
