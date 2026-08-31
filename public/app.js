@@ -22,9 +22,24 @@ function escaparTexto(valor) {
     .replace(/'/g, '&#39;');
 }
 
-// Timers do QR Code da tela de Configurações > WhatsApps, por número. Ficam
-// aqui no topo porque o roteamento precisa pará-los ao sair da tela e ele
-// roda antes do resto do arquivo.
+// Estado compartilhado entre telas. Fica aqui no topo, e não junto do código
+// que o usa, porque o roteamento roda durante o carregamento do arquivo -
+// antes das declarações que viessem depois dele. Declarar embaixo dá
+// "Cannot access before initialization" e a tela inicial abre errada.
+let todosOsLeads = [];
+
+// De qual número saiu cada lead. O lead guarda só o whatsappId; o apelido
+// (que é o que interessa na tela) mora na configuração. Busca uma vez e
+// guarda - o quadro se redesenha a cada 30s e não vale refazer essa chamada
+// junto. O cache é atualizado ao salvar a configuração, então renomear um
+// número reflete no quadro sem recarregar a página.
+let whatsappsConhecidos = null;
+
+// Marcador dos leads que não pertencem a número nenhum (ver o comentário em
+// atualizarFiltroDeWhatsapp).
+const SEM_NUMERO = '__sem_numero__';
+
+// Timers do QR Code da tela de Configurações > WhatsApps, por número.
 const conexoesAtivas = new Map();
 
 function pararConexao(id) {
@@ -112,15 +127,34 @@ function rotear() {
   if (view === 'lead' && param) {
     mostrarView('lead');
     carregarDetalheLead(param);
+  } else if (view === 'numeros') {
+    mostrarView('numeros');
+    carregarTelaDeNumeros();
   } else if (['novo', 'testar', 'codigo', 'config', 'relatorio', 'metricas', 'backup'].includes(view)) {
     mostrarView(view);
     if (view === 'config') carregarConfig();
     if (view === 'relatorio') prepararRelatorio();
     if (view === 'metricas') carregarMetricas();
-  } else {
+  } else if (view === 'leads') {
+    // "#leads/wa-1" abre o quadro já filtrado naquele número.
     mostrarView('leads');
-    carregarLeads();
+    carregarLeads(param || '');
+  } else {
+    // Entrada sem destino: com mais de um número, a primeira tela é a escolha
+    // do número - é assim que a operação acontece, um número por vez. Com um
+    // número só (ou nenhum), essa tela não separaria nada e o quadro abre direto.
+    abrirTelaInicial();
   }
+}
+
+async function abrirTelaInicial() {
+  const numeros = await garantirWhatsappsConhecidos();
+  if (numeros.length >= 2) {
+    location.hash = '#numeros';
+    return;
+  }
+  mostrarView('leads');
+  carregarLeads('');
 }
 
 window.addEventListener('hashchange', rotear);
@@ -159,21 +193,15 @@ function colunaDoLead(lead) {
   return 'aguardando_envio';
 }
 
-let todosOsLeads = [];
-
-// De qual numero saiu cada lead. O lead guarda so o whatsappId; o apelido
-// (que e o que interessa na tela) mora na configuracao. Busca uma vez e
-// guarda - o quadro se redesenha a cada 30s e nao vale refazer essa chamada
-// junto. O cache e atualizado ao salvar a configuracao, entao renomear um
-// numero reflete aqui sem recarregar a pagina.
-let whatsappsConhecidos = null;
-
 async function garantirWhatsappsConhecidos() {
   if (whatsappsConhecidos) return whatsappsConhecidos;
   try {
     const resp = await api('/api/config');
     const cfg = await resp.json();
     whatsappsConhecidos = (cfg.whatsapps || []).map((w) => ({ id: w.id, apelido: w.apelido || w.id }));
+    // O atalho pros números só faz sentido quando há mais de um.
+    document.getElementById('link-numeros').style.display =
+      whatsappsConhecidos.length >= 2 ? 'inline-flex' : 'none';
   } catch (erro) {
     // Sem os apelidos o quadro ainda funciona - so nao mostra a etiqueta.
     // O cache fica vazio de proposito: assim a proxima atualizacao do
@@ -205,14 +233,6 @@ function apelidoDoWhatsapp(id) {
 
 // O <select> so aparece com dois ou mais numeros cadastrados - com um (ou
 // nenhum) ele nao filtra nada.
-// Marcador dos leads que não pertencem a número nenhum. Eles existem de
-// verdade: todo lead criado antes de você cadastrar os números ficou sem
-// dono, porque o número é fixado no momento em que o lead entra na esteira.
-// Sem uma opção pra eles, ficariam invisíveis em qualquer filtro - você
-// cadastraria os dois números e a maior parte da base não apareceria em
-// nenhum dos dois.
-const SEM_NUMERO = '__sem_numero__';
-
 function atualizarFiltroDeWhatsapp() {
   const filtro = document.getElementById('filtro-whatsapp');
   const numeros = whatsappsConhecidos || [];
@@ -241,7 +261,109 @@ function atualizarFiltroDeWhatsapp() {
   filtro.style.display = 'block';
 }
 
-async function carregarLeads() {
+// --- Tela inicial: um cartão por número ---
+// Cada número é uma carteira separada, com a própria fila e os próprios
+// resultados. Somar tudo numa tela só escondia justamente o que interessa
+// quando há mais de um: como cada um está indo.
+
+function contarLeadsDoNumero(leads, id) {
+  const meus = id === SEM_NUMERO ? leads.filter((l) => !l.whatsappId) : leads.filter((l) => l.whatsappId === id);
+  return {
+    total: meus.length,
+    aguardando: meus.filter((l) => ['sequence_active', 'aguardando_resposta'].includes(l.status)).length,
+    conversando: meus.filter((l) => ['conversa_ia', 'human_handoff'].includes(l.status)).length,
+    reunioes: meus.filter((l) => l.motivoEncerramento === 'horario_confirmado').length,
+  };
+}
+
+// "legenda" substitui a checagem de conexão nos cartões que não têm número
+// de verdade (os leads sem dono e a visão geral) - deixá-los "verificando…"
+// pra sempre seria esperar uma resposta que nunca vem.
+function cartaoDeNumero({ id, apelido, contagem, legenda, href }) {
+  const linhaDeConexao = legenda
+    ? `<span class="conexao"><span class="ponto"></span>${escaparTexto(legenda)}</span>`
+    : `<span class="conexao" data-conexao-de="${escaparAtributo(id)}"><span class="ponto"></span>verificando…</span>`;
+
+  return `
+    <a class="cartao-numero" href="${href || `#leads/${encodeURIComponent(id)}`}">
+      <span class="apelido">${escaparTexto(apelido)}</span>
+      ${linhaDeConexao}
+      <div class="placar">
+        <div><strong>${contagem.total}</strong><span>${contagem.total === 1 ? 'lead' : 'leads'}</span></div>
+        <div><strong>${contagem.aguardando}</strong><span>na fila</span></div>
+        <div><strong>${contagem.conversando}</strong><span>conversando</span></div>
+        <div><strong>${contagem.reunioes}</strong><span>${contagem.reunioes === 1 ? 'reunião' : 'reuniões'}</span></div>
+      </div>
+    </a>
+  `;
+}
+
+async function carregarTelaDeNumeros() {
+  const grade = document.getElementById('grade-numeros');
+  try {
+    whatsappsConhecidos = null; // apelidos podem ter mudado desde a última vez
+    const numeros = await garantirWhatsappsConhecidos();
+    const resp = await api('/api/leads?resumo=1');
+    const leads = await resp.json();
+
+    const cartoes = numeros.map((w) => cartaoDeNumero({
+      id: w.id, apelido: w.apelido, contagem: contarLeadsDoNumero(leads, w.id),
+    }));
+
+    // Leads que entraram antes de os números existirem não somem daqui.
+    if (leads.some((l) => !l.whatsappId)) {
+      cartoes.push(cartaoDeNumero({
+        id: SEM_NUMERO,
+        apelido: 'Sem número definido',
+        contagem: contarLeadsDoNumero(leads, SEM_NUMERO),
+        legenda: 'não sai mensagem por aqui',
+      }));
+    }
+
+    cartoes.push(cartaoDeNumero({
+      apelido: 'Todos os números',
+      href: '#leads',
+      legenda: 'visão geral',
+      contagem: {
+        total: leads.length,
+        aguardando: leads.filter((l) => ['sequence_active', 'aguardando_resposta'].includes(l.status)).length,
+        conversando: leads.filter((l) => ['conversa_ia', 'human_handoff'].includes(l.status)).length,
+        reunioes: leads.filter((l) => l.motivoEncerramento === 'horario_confirmado').length,
+      },
+    }));
+
+    grade.innerHTML = cartoes.join('');
+
+    atualizarConexaoDosCartoes(numeros);
+  } catch (erro) {
+    grade.innerHTML = '<div class="vazio">Não consegui carregar os números agora.</div>';
+  }
+}
+
+// O status de conexão chega depois: são chamadas à Z-API, e os contadores não
+// precisam esperar por elas pra aparecer.
+function atualizarConexaoDosCartoes(numeros) {
+  numeros.forEach(async (w) => {
+    const alvo = document.querySelector(`.conexao[data-conexao-de="${w.id}"]`);
+    if (!alvo) return;
+    try {
+      const resp = await api(`/api/whatsapps/${encodeURIComponent(w.id)}/status`);
+      const dados = await resp.json();
+      if (!resp.ok) throw new Error(dados.erro || 'falha');
+      alvo.classList.toggle('conectado', Boolean(dados.conectado));
+      alvo.classList.toggle('caiu', !dados.conectado);
+      alvo.innerHTML = `<span class="ponto"></span>${dados.conectado ? 'conectado' : 'desconectado'}`;
+    } catch (erro) {
+      alvo.classList.add('caiu');
+      alvo.innerHTML = '<span class="ponto"></span>não consegui verificar';
+    }
+  });
+}
+
+// "filtrarPor" undefined = preserva o que já está escolhido. É o caso da
+// atualização automática de 30s, que não pode desfazer o filtro por baixo de
+// quem está olhando a tela.
+async function carregarLeads(filtrarPor) {
   const quadro = document.getElementById('quadro');
   try {
     await garantirWhatsappsConhecidos();
@@ -249,12 +371,35 @@ async function carregarLeads() {
     // é ele que fica recarregando a cada 30 segundos.
     const resp = await api('/api/leads?resumo=1');
     todosOsLeads = await resp.json();
+
     atualizarFiltroDeWhatsapp();
+    if (filtrarPor !== undefined) document.getElementById('filtro-whatsapp').value = filtrarPor;
+
+    atualizarCabecalhoDoNumero();
     renderizarQuadro();
     atualizarEstadoPausa();
   } catch (erro) {
     quadro.innerHTML = '<div class="vazio">Não consegui carregar os leads agora.</div>';
   }
+}
+
+// Diz de quem é a carteira que está na tela, e dá o caminho de volta. Sem
+// isso, o quadro filtrado é visualmente idêntico ao quadro cheio - dá pra
+// achar que os outros leads sumiram.
+function atualizarCabecalhoDoNumero() {
+  const cabecalho = document.getElementById('cabecalho-numero');
+  const escolhido = document.getElementById('filtro-whatsapp').value;
+  const numeros = whatsappsConhecidos || [];
+
+  if (!escolhido || numeros.length < 2) {
+    cabecalho.style.display = 'none';
+    return;
+  }
+  const nome = escolhido === SEM_NUMERO
+    ? 'Sem número definido'
+    : (numeros.find((w) => w.id === escolhido) || {}).apelido || 'Número removido';
+  document.getElementById('titulo-numero').textContent = nome;
+  cabecalho.style.display = 'block';
 }
 
 function renderizarQuadro() {
@@ -305,7 +450,10 @@ function renderizarQuadro() {
 }
 
 document.getElementById('busca-telefone').addEventListener('input', renderizarQuadro);
-document.getElementById('filtro-whatsapp').addEventListener('change', renderizarQuadro);
+document.getElementById('filtro-whatsapp').addEventListener('change', () => {
+  atualizarCabecalhoDoNumero();
+  renderizarQuadro();
+});
 
 // O quadro se atualiza sozinho a cada 30s enquanto estiver aberto, pra
 // refletir mensagens que sairam ou leads que responderam nesse meio tempo.

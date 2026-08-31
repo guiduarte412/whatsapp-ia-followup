@@ -410,6 +410,73 @@ h2 {
   border-radius: 10px;
 }
 
+/* --- Escolha do número (tela inicial com mais de um número) --- */
+
+.grade-numeros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.cartao-numero {
+  display: block;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  padding: 20px;
+  text-decoration: none;
+  color: var(--branco);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cartao-numero:hover { background: rgba(255,255,255,0.12); border-color: var(--laranja); }
+
+.cartao-numero .apelido {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cartao-numero .conexao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--texto-fraco);
+  margin-bottom: 18px;
+}
+.cartao-numero .conexao .ponto { width: 7px; height: 7px; border-radius: 50%; background: var(--texto-fraco); }
+.cartao-numero .conexao.conectado { color: var(--laranja); }
+.cartao-numero .conexao.conectado .ponto { background: var(--laranja); }
+.cartao-numero .conexao.caiu { color: var(--alerta); }
+.cartao-numero .conexao.caiu .ponto { background: var(--alerta); }
+
+.cartao-numero .placar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  border-top: 1px solid var(--linha);
+  padding-top: 14px;
+}
+.cartao-numero .placar div { text-align: center; }
+.cartao-numero .placar strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cartao-numero .placar span {
+  display: block;
+  font-size: 10px;
+  color: var(--texto-fraco);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
 /* Segunda tentativa a caminho: informação de agenda, não de status - por
    isso fica em texto simples, sem pílula, pra não competir com o número. */
 .cartao-lead .aviso-followup {
