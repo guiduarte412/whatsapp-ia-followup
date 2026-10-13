@@ -1113,42 +1113,54 @@ function renderizarWhatsapps(lista) {
     verificarStatusDosCartoes();
     return;
   }
+
+  // A conexão vem primeiro no cartão: é o que você usa toda vez (ver se caiu,
+  // reconectar por QR Code). As credenciais da Z-API ficam recolhidas, porque
+  // são coladas uma vez e não se mexe mais nelas.
   alvo.innerHTML = lista.map((w, i) => `
     <div class="cartao-whatsapp" data-id="${escaparAtributo(w.id || '')}" data-token-salvo="${w.tokenSalvo ? 'sim' : 'nao'}" data-client-token-salvo="${w.clientTokenSalvo ? 'sim' : 'nao'}" style="border:1px solid rgba(255,255,255,0.14); border-radius:8px; padding:18px; margin-bottom:18px;">
       <div class="campo">
         <label>Apelido</label>
         <input type="text" class="wa-apelido" value="${escaparAtributo(w.apelido)}" placeholder="Ex: Número 1">
       </div>
-      <div class="campo">
-        <label>Instance ID (Z-API)</label>
-        <input type="text" class="wa-instance" value="${escaparAtributo(w.instanceId)}">
+
+      ${w.id
+        ? blocoDeConexao(w.id)
+        : '<p class="dica">Preencha os dados da Z-API abaixo e salve — aí o QR Code aparece aqui.</p>'}
+
+      <div class="wa-avancado${w.instanceId ? '' : ' aberto'}">
+        <button type="button" class="wa-avancado-titulo">Dados da Z-API e opções do número</button>
+        <div class="wa-avancado-corpo">
+        <div class="campo">
+          <label>Instance ID (Z-API)</label>
+          <input type="text" class="wa-instance" value="${escaparAtributo(w.instanceId)}">
+        </div>
+        <div class="campo">
+          <label>Token (Z-API)</label>
+          <input type="password" class="wa-token" placeholder="${w.tokenSalvo ? 'já salvo — deixe em branco pra manter' : 'cole o token'}">
+        </div>
+        <div class="campo">
+          <label>Client-Token (Z-API)</label>
+          <input type="password" class="wa-client-token" placeholder="${w.clientTokenSalvo ? 'já salvo — deixe em branco pra manter' : 'cole o client-token'}">
+        </div>
+        <div class="campo">
+          <label>Nome nas mensagens (opcional)</label>
+          <input type="text" class="wa-nome" value="${escaparAtributo(w.nomeExibicao)}" placeholder="Em branco = usa o nome da aba Identidade">
+        </div>
+        <div class="campo">
+          <label>Avisos vão para (opcional)</label>
+          <input type="text" class="wa-avisar" value="${escaparAtributo(w.avisarNumero)}" placeholder="Em branco = vão pro número padrão do sistema">
+        </div>
+        ${w.id
+          ? `<p class="dica">Webhook desse número — cole na Z-API em "ao receber mensagem":<br><code style="word-break:break-all;">${location.origin}/webhooks/whatsapp/${escaparTexto(w.id)}</code></p>`
+          : '<p class="dica">Salve pra gerar a URL de webhook desse número.</p>'}
+        </div>
       </div>
-      <div class="campo">
-        <label>Token (Z-API)</label>
-        <input type="password" class="wa-token" placeholder="${w.tokenSalvo ? 'já salvo — deixe em branco pra manter' : 'cole o token'}">
-      </div>
-      <div class="campo">
-        <label>Client-Token (Z-API)</label>
-        <input type="password" class="wa-client-token" placeholder="${w.clientTokenSalvo ? 'já salvo — deixe em branco pra manter' : 'cole o client-token'}">
-      </div>
-      <div class="campo">
-        <label>Nome nas mensagens (opcional)</label>
-        <input type="text" class="wa-nome" value="${escaparAtributo(w.nomeExibicao)}" placeholder="Em branco = usa o nome da aba Identidade">
-      </div>
-      <div class="campo">
-        <label>Avisos vão para (opcional)</label>
-        <input type="text" class="wa-avisar" value="${escaparAtributo(w.avisarNumero)}" placeholder="Em branco = vão pro número padrão do sistema">
-      </div>
-      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:12px;">
+
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin:14px 0 12px;">
         <input type="checkbox" class="wa-ativo" ${w.ativo ? 'checked' : ''} style="width:auto;">
         Ativo (entra no rodízio e recebe leads novos)
       </label>
-      ${w.id
-        ? `<p class="dica">Webhook desse número — cole na Z-API em "ao receber mensagem":<br><code style="word-break:break-all;">${location.origin}/webhooks/whatsapp/${escaparTexto(w.id)}</code></p>`
-        : '<p class="dica">Salve pra gerar a URL de webhook desse número.</p>'}
-      ${w.id
-        ? blocoDeConexao(w.id)
-        : '<p class="dica">Salve o número pra poder conectar o WhatsApp por aqui.</p>'}
       <button type="button" class="botao secundario btn-remover-whatsapp" data-indice="${i}">Remover número</button>
     </div>
   `).join('');
@@ -1462,6 +1474,13 @@ document.getElementById('view-config').addEventListener('click', (evento) => {
     if (acaoDeConexao.classList.contains('wa-btn-conectar')) conectarWhatsapp(id);
     else if (acaoDeConexao.classList.contains('wa-btn-desconectar')) desconectarWhatsapp(id);
     else encerrarTelaDeQrCode(id);
+    return;
+  }
+
+  // Abre/fecha o bloco das credenciais da Z-API.
+  const tituloAvancado = evento.target.closest('.wa-avancado-titulo');
+  if (tituloAvancado) {
+    tituloAvancado.closest('.wa-avancado').classList.toggle('aberto');
     return;
   }
 

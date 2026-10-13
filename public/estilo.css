@@ -551,3 +551,26 @@ h2 {
   .nome, .status, span { color: #000 !important; }
   .status .ponto { background: #000 !important; }
 }
+
+/* Credenciais da Z-API: coladas uma vez e nunca mais. Ficam recolhidas pra
+   não competir com o que se usa sempre, que é conectar e ver o status. */
+.wa-avancado {
+  border-top: 1px solid var(--linha);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.wa-avancado-titulo {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--texto-fraco);
+  text-align: left;
+}
+.wa-avancado-titulo:hover { color: var(--branco); }
+.wa-avancado-titulo::before { content: "▸ "; }
+.wa-avancado.aberto .wa-avancado-titulo::before { content: "▾ "; }
+.wa-avancado-corpo { display: none; margin-top: 14px; }
+.wa-avancado.aberto .wa-avancado-corpo { display: block; }
