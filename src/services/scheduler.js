@@ -45,13 +45,13 @@ function sortearIntervaloMs() {
 
 // Quantas mensagens esse lead pode receber no total: a abertura e, se voce
 // cadastrou mensagens de follow-up, mais uma. Nunca mais que isso.
-function totalDeTentativas() {
-  return followupEstaAtivo() ? 2 : 1;
+function totalDeTentativas(whatsappId = null) {
+  return followupEstaAtivo(whatsappId) ? 2 : 1;
 }
 
 // Ja passou a hora sorteada desse lead e ele ainda tem tentativa disponivel?
 function estaNaHoraDeEnviar(lead) {
-  if ((lead.attemptsSent || 0) >= totalDeTentativas()) return false;
+  if ((lead.attemptsSent || 0) >= totalDeTentativas(lead.whatsappId)) return false;
   if (!lead.proximoEnvioEm) return false;
   return Date.now() >= new Date(lead.proximoEnvioEm).getTime();
 }
@@ -108,8 +108,8 @@ async function processarLead(lead) {
   // numero diferente do primeiro - do lado de la, duas pessoas cobrando.
   const ehFollowup = (lead.attemptsSent || 0) >= 1;
   const mensagem = ehFollowup
-    ? montarMensagemDeFollowup(lead.nome)
-    : montarMensagemDeAbertura(lead.nome);
+    ? montarMensagemDeFollowup(lead.nome, { whatsappId: lead.whatsappId })
+    : montarMensagemDeAbertura(lead.nome, { whatsappId: lead.whatsappId });
 
   // Nenhuma mensagem cadastrada em Configuracoes. O sistema NAO inventa um
   // texto pra cobrir o buraco - prefere nao mandar nada e avisar voce.
@@ -163,7 +163,7 @@ async function processarLead(lead) {
   // marcada, so os leads novos entram no ciclo de duas mensagens; sem ela,
   // todo lead antigo que nunca respondeu viraria elegivel de uma vez e o
   // sistema dispararia a fila inteira de surpresa.
-  const agendarFollowup = tentativasFeitas < totalDeTentativas();
+  const agendarFollowup = tentativasFeitas < totalDeTentativas(lead.whatsappId);
 
   // Mensagem entregue: sai da fila de envio e passa a esperar a resposta.
   // Nao avisa voce aqui - isso e o caminho normal, o aviso so faz sentido
@@ -207,7 +207,7 @@ async function rodarCiclo() {
       // o cartao para de anunciar uma mensagem que nao vai sair, e religar
       // a 2a tentativa mais tarde nao dispara de uma vez a fila inteira de
       // leads com data vencida.
-      if (lead.proximoEnvioEm && (lead.attemptsSent || 0) >= totalDeTentativas()) {
+      if (lead.proximoEnvioEm && (lead.attemptsSent || 0) >= totalDeTentativas(lead.whatsappId)) {
         upsertLead(lead.phone, { proximoEnvioEm: null });
         continue;
       }

@@ -1313,6 +1313,77 @@ document.getElementById('btn-add-whatsapp').addEventListener('click', () => {
   }]);
 });
 
+
+// --- Mensagens por número ---
+// Cada número tem a sua lista. A tela mostra uma seção por número cadastrado,
+// em vez de um seletor: com dois números, ver as duas listas lado a lado é
+// o que deixa claro que elas são separadas mesmo.
+
+let configAtual = null; // guarda os números pra montar o corpo ao salvar
+
+function campoDeMensagem(classe, rotulo, texto, indice) {
+  return `
+    <div class="campo">
+      <label>${rotulo} ${indice + 1}</label>
+      <textarea class="${classe}" rows="4">${escaparParaTextarea(texto)}</textarea>
+      <button type="button" class="botao secundario btn-remover-item" data-classe="${classe}" data-indice="${indice}" style="margin-top:8px;">Remover</button>
+    </div>
+  `;
+}
+
+function renderizarMensagensPorNumero(numeros) {
+  const alvo = document.getElementById('cfg-mensagens-por-numero');
+  const geral = document.getElementById('cfg-mensagens-geral');
+
+  // Sem número cadastrado (ou com um só), não há o que separar: segue a lista
+  // única de sempre.
+  const followupGeral = document.getElementById('cfg-followup-geral');
+
+  if (!numeros || numeros.length < 2) {
+    alvo.innerHTML = '';
+    alvo.style.display = 'none';
+    geral.style.display = 'block';
+    followupGeral.style.display = 'block';
+    return;
+  }
+
+  geral.style.display = 'none';
+  followupGeral.style.display = 'none';
+  alvo.style.display = 'block';
+  alvo.innerHTML = numeros.map((w) => `
+    <div class="lista-do-numero" data-numero="${escaparAtributo(w.id)}">
+      <h4>${escaparTexto(w.apelido)}</h4>
+      <p class="dica">Mensagens que saem por esse número. Os leads dele recebem uma de cada vez, em rodízio.</p>
+      <div class="msgs-do-numero">
+        ${(w.mensagens || []).length
+          ? (w.mensagens || []).map((t, i) => campoDeMensagem('msg-' + w.id, 'Mensagem', t, i)).join('')
+          : '<p class="dica">Nenhuma mensagem pra esse número ainda.</p>'}
+      </div>
+      <button type="button" class="botao secundario btn-add-msg-numero" data-numero="${escaparAtributo(w.id)}">+ Adicionar mensagem</button>
+
+      <div class="segunda-do-numero">
+        <h5>Segunda tentativa</h5>
+        <p class="dica">Pra quem não respondeu. Deixe vazio se não quiser.</p>
+        <div class="followups-do-numero">
+          ${(w.mensagensFollowup || []).length
+            ? (w.mensagensFollowup || []).map((t, i) => campoDeMensagem('fup-' + w.id, 'Segunda tentativa', t, i)).join('')
+            : '<p class="dica">Sem segunda tentativa nesse número.</p>'}
+        </div>
+        <button type="button" class="botao secundario btn-add-fup-numero" data-numero="${escaparAtributo(w.id)}">+ Adicionar segunda tentativa</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Lê o que está na tela de volta pros números, pra mandar no PUT.
+function mensagensDosNumeros() {
+  return [...document.querySelectorAll('.lista-do-numero')].map((bloco) => ({
+    id: bloco.dataset.numero,
+    mensagens: [...bloco.querySelectorAll('.msgs-do-numero textarea')].map((t) => t.value).filter((t) => t.trim()),
+    mensagensFollowup: [...bloco.querySelectorAll('.followups-do-numero textarea')].map((t) => t.value).filter((t) => t.trim()),
+  }));
+}
+
 // --- Números bloqueados ---
 // Diferente do resto desta tela, aqui nada espera o botão Salvar: bloquear e
 // liberar valem na hora. Um pedido de "não me manda mais mensagem" que ficasse
@@ -1420,7 +1491,9 @@ async function carregarConfig(abaInicial) {
 
   whatsappsConhecidos = (cfg.whatsapps || []).map((w) => ({ id: w.id, apelido: w.apelido || w.id }));
 
+  configAtual = cfg;
   renderizarWhatsapps(cfg.whatsapps || []);
+  renderizarMensagensPorNumero(cfg.whatsapps || []);
   renderizarLista('cfg-mensagem', cfg.mensagens);
   renderizarLista('cfg-followup', cfg.mensagensFollowup || []);
   renderizarLista('cfg-regra', cfg.regras);
@@ -1451,6 +1524,43 @@ document.querySelectorAll('#abas-config .aba').forEach((aba) => {
     document.getElementById('btn-salvar-config').style.display =
       aba.dataset.painel === 'bloqueios' ? 'none' : 'inline-flex';
   });
+});
+
+
+// Adicionar e remover mensagens dentro de um número. São campos criados na
+// hora, por isso o clique é escutado no container - igual ao resto da tela.
+document.getElementById('view-config').addEventListener('click', (evento) => {
+  const addMsg = evento.target.closest('.btn-add-msg-numero');
+  const addFup = evento.target.closest('.btn-add-fup-numero');
+  if (addMsg || addFup) {
+    const botao = addMsg || addFup;
+    const bloco = botao.closest('.lista-do-numero');
+    const id = bloco.dataset.numero;
+    const corpo = bloco.querySelector(addMsg ? '.msgs-do-numero' : '.followups-do-numero');
+    const classe = (addMsg ? 'msg-' : 'fup-') + id;
+    const rotulo = addMsg ? 'Mensagem' : 'Segunda tentativa';
+
+    // A primeira mensagem entra no lugar do aviso de lista vazia.
+    const jaTem = corpo.querySelectorAll('textarea').length;
+    if (!jaTem) corpo.innerHTML = '';
+    corpo.insertAdjacentHTML('beforeend', campoDeMensagem(classe, rotulo, '', jaTem));
+    corpo.querySelectorAll('textarea')[jaTem].focus();
+    return;
+  }
+
+  const removerDoNumero = evento.target.closest('.lista-do-numero .btn-remover-item');
+  if (removerDoNumero) {
+    const corpo = removerDoNumero.closest('.msgs-do-numero, .followups-do-numero');
+    removerDoNumero.closest('.campo').remove();
+    // Renumera os rótulos pra não ficar "Mensagem 1, Mensagem 3".
+    [...corpo.querySelectorAll('.campo label')].forEach((rotulo, i) => {
+      rotulo.textContent = rotulo.textContent.replace(/\d+$/, String(i + 1));
+    });
+    if (!corpo.querySelector('textarea')) {
+      corpo.innerHTML = '<p class="dica">Nenhuma mensagem aqui ainda.</p>';
+    }
+    return;
+  }
 });
 
 document.getElementById('btn-add-mensagem').addEventListener('click', () => {
@@ -1521,8 +1631,16 @@ document.getElementById('btn-salvar-config').addEventListener('click', async () 
   sucesso.style.display = 'none';
   erro.style.display = 'none';
 
+  // Junta as credenciais (aba WhatsApps) com as listas de mensagens de cada
+  // número (aba Mensagens): os dois pedaços descrevem o mesmo número.
+  const porNumero = mensagensDosNumeros();
+  const numeros = valoresDosWhatsapps().map((w) => {
+    const listas = porNumero.find((p) => p.id === w.id);
+    return listas ? { ...w, mensagens: listas.mensagens, mensagensFollowup: listas.mensagensFollowup } : w;
+  });
+
   const corpo = {
-    whatsapps: valoresDosWhatsapps(),
+    whatsapps: numeros,
     identidade: {
       nome: document.getElementById('cfg-nome').value.trim(),
       empresa: document.getElementById('cfg-empresa').value.trim(),
@@ -1556,18 +1674,32 @@ document.getElementById('btn-salvar-config').addEventListener('click', async () 
       erro.style.display = 'block';
       return;
     }
+    configAtual = dados;
     renderizarWhatsapps(dados.whatsapps || []);
+    renderizarMensagensPorNumero(dados.whatsapps || []);
     renderizarLista('cfg-mensagem', dados.mensagens);
     renderizarLista('cfg-followup', dados.mensagensFollowup || []);
     renderizarLista('cfg-regra', dados.regras);
     // Renomear um número precisa aparecer no quadro sem recarregar a página.
     whatsappsConhecidos = (dados.whatsapps || []).map((w) => ({ id: w.id, apelido: w.apelido || w.id }));
-    const qtdFollowup = (dados.mensagensFollowup || []).length;
-    sucesso.textContent = `Salvo — ${(dados.whatsapps || []).filter((w) => w.ativo).length} número(s) ativo(s), `
-      + `${dados.mensagens.length} mensagem(ns) de abertura, ${dados.regras.length} regra(s). `
-      + (qtdFollowup
-        ? `Segunda tentativa ligada, com ${qtdFollowup} mensagem(ns).`
-        : 'Sem segunda tentativa — cada lead recebe uma mensagem só.');
+    // O resumo precisa contar as listas de cada número, não só a geral: com
+    // mensagens por número as listas gerais ficam vazias, e dizer "0 mensagens
+    // / sem segunda tentativa" seria o contrário do que acabou de ser salvo.
+    const numeros = dados.whatsapps || [];
+    const comListaPropria = numeros.filter((w) => (w.mensagens || []).length);
+    const ativos = numeros.filter((w) => w.ativo).length;
+
+    sucesso.textContent = comListaPropria.length
+      ? "Salvo — " + ativos + " número(s) ativo(s). " + comListaPropria.map((w) =>
+          w.apelido + ": " + w.mensagens.length + " mensagem(ns)"
+          + ((w.mensagensFollowup || []).length
+            ? " e " + w.mensagensFollowup.length + " de segunda tentativa"
+            : ", sem segunda tentativa")).join(" · ")
+      : "Salvo — " + ativos + " número(s) ativo(s), " + dados.mensagens.length
+        + " mensagem(ns) de abertura, " + dados.regras.length + " regra(s). "
+        + ((dados.mensagensFollowup || []).length
+          ? "Segunda tentativa ligada, com " + dados.mensagensFollowup.length + " mensagem(ns)."
+          : "Sem segunda tentativa — cada lead recebe uma mensagem só.");
     sucesso.style.display = 'block';
     setTimeout(() => { sucesso.style.display = 'none'; }, 3000);
   } catch (falha) {

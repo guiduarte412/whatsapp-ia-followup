@@ -67,6 +67,8 @@ function paraATela(config) {
       nomeExibicao: w.nomeExibicao || '',
       avisarNumero: w.avisarNumero || '',
       ativo: w.ativo !== false,
+      mensagens: w.mensagens || [],
+      mensagensFollowup: w.mensagensFollowup || [],
     })),
   };
 }
@@ -117,6 +119,10 @@ function montarWhatsapps(recebidos, atuais) {
       nomeExibicao: (bruto.nomeExibicao || '').toString().trim().slice(0, 60),
       avisarNumero,
       ativo: bruto.ativo !== false,
+      // Cada numero tem a sua lista. Campo ausente = mantem o que ja estava
+      // salvo, pra uma tela que nao mande as listas nao apagar as mensagens.
+      mensagens: limparLista(bruto.mensagens) || anterior.mensagens || [],
+      mensagensFollowup: limparLista(bruto.mensagensFollowup) || anterior.mensagensFollowup || [],
     });
   }
 

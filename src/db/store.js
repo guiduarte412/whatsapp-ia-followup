@@ -177,21 +177,61 @@ function proximaMensagem(lista, nomeDoLead, chaveDoPonteiro, avancar = true) {
   return aplicarNome(validas[posicao], nomeDoLead);
 }
 
-function montarMensagemDeAbertura(nomeDoLead, { avancarRodizio = true } = {}) {
-  return proximaMensagem(getConfig().mensagens, nomeDoLead, 'ultimaMensagemIndice', avancarRodizio);
+// Cada número tem a SUA lista de mensagens: dois números disparando os
+// mesmos textos seriam, do lado de quem recebe, a mesma pessoa falando duas
+// vezes. Quem não tiver lista própria cai na lista geral - é o que mantém
+// funcionando quem usa um número só, sem precisar cadastrar nada por número.
+function listaDoNumero(whatsappId, qual) {
+  const config = getConfig();
+  const numero = whatsappId ? getWhatsappPorId(whatsappId) : null;
+  if (!numero) return config[qual] || [];
+
+  // A lista de ABERTURA decide o modo do numero. Se ele tem a dele, passa a
+  // viver so das proprias listas - e deixar a segunda tentativa vazia quer
+  // dizer "esse numero nao faz segunda tentativa", nao "use a lista geral".
+  // Sem essa regra, apagar a segunda tentativa de um numero faria sair a
+  // mensagem geral no lugar, que e o oposto do que se pediu.
+  const temListaPropria = Array.isArray(numero.mensagens)
+    && numero.mensagens.some((m) => m && m.trim());
+
+  if (temListaPropria) {
+    return (numero[qual] || []).filter((m) => m && m.trim());
+  }
+
+  // Numero sem lista propria: segue a lista geral, que e o modo de quem usa
+  // um numero so e nao quer cadastrar nada por numero.
+  return config[qual] || [];
+}
+
+// O rodízio é contado por número, senão as duas listas andariam no mesmo
+// contador e cada uma pularia posições da outra.
+function chaveDoRodizio(base, whatsappId) {
+  return whatsappId ? `${base}_${whatsappId}` : base;
+}
+
+function montarMensagemDeAbertura(nomeDoLead, { whatsappId = null, avancarRodizio = true } = {}) {
+  return proximaMensagem(
+    listaDoNumero(whatsappId, 'mensagens'),
+    nomeDoLead,
+    chaveDoRodizio('ultimaMensagemIndice', whatsappId),
+    avancarRodizio
+  );
 }
 
 // Mensagem da 2a tentativa, pra quem nao respondeu a abertura.
-function montarMensagemDeFollowup(nomeDoLead, { avancarRodizio = true } = {}) {
-  return proximaMensagem(getConfig().mensagensFollowup, nomeDoLead, 'ultimaMensagemFollowupIndice', avancarRodizio);
+function montarMensagemDeFollowup(nomeDoLead, { whatsappId = null, avancarRodizio = true } = {}) {
+  return proximaMensagem(
+    listaDoNumero(whatsappId, 'mensagensFollowup'),
+    nomeDoLead,
+    chaveDoRodizio('ultimaMensagemFollowupIndice', whatsappId),
+    avancarRodizio
+  );
 }
 
-// A 2a tentativa existe quando ha pelo menos uma mensagem de follow-up
-// cadastrada - a mesma regra que ja vale pra abertura: sem texto cadastrado,
-// o sistema nao manda nada e nao inventa nada. Apagar as mensagens de
-// follow-up desliga a 2a tentativa, sem precisar de outro botao pra isso.
-function followupEstaAtivo() {
-  return getConfig().mensagensFollowup.some((m) => m && m.trim());
+// A 2a tentativa existe quando ha pelo menos uma mensagem de follow-up pra
+// AQUELE numero - um numero pode ter segunda tentativa e o outro nao.
+function followupEstaAtivo(whatsappId = null) {
+  return listaDoNumero(whatsappId, 'mensagensFollowup').some((m) => m && m.trim());
 }
 
 // --- WhatsApps conectados ---

@@ -574,3 +574,28 @@ h2 {
 .wa-avancado.aberto .wa-avancado-titulo::before { content: "▾ "; }
 .wa-avancado-corpo { display: none; margin-top: 14px; }
 .wa-avancado.aberto .wa-avancado-corpo { display: block; }
+
+/* --- Mensagens separadas por número --- */
+.lista-do-numero {
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.lista-do-numero > h4 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+.lista-do-numero .segunda-do-numero {
+  border-top: 1px solid var(--linha);
+  margin-top: 22px;
+  padding-top: 16px;
+}
+.lista-do-numero .segunda-do-numero > h5 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--branco);
+}

@@ -345,9 +345,14 @@
             centenas de números é justamente o padrão que o WhatsApp trata como
             spam. Use <strong>{nome}</strong> onde quiser o primeiro nome da pessoa.
           </p>
-          <div id="cfg-mensagens"></div>
-          <button type="button" class="botao secundario" id="btn-add-mensagem" style="margin-top:16px;">+ Adicionar mensagem</button>
+          <div id="cfg-mensagens-por-numero" style="display:none;"></div>
 
+          <div id="cfg-mensagens-geral">
+            <div id="cfg-mensagens"></div>
+            <button type="button" class="botao secundario" id="btn-add-mensagem" style="margin-top:16px;">+ Adicionar mensagem</button>
+          </div>
+
+          <div id="cfg-followup-geral">
           <hr style="border:none; border-top:1px solid var(--linha); margin:36px 0 28px;">
 
           <h3 style="margin:0 0 4px; font-size:16px;">Segunda tentativa</h3>
@@ -368,6 +373,7 @@
           </p>
           <div id="cfg-followups"></div>
           <button type="button" class="botao secundario" id="btn-add-followup" style="margin-top:16px;">+ Adicionar mensagem de segunda tentativa</button>
+          </div>
 
           <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:28px;">
             <div class="campo" style="flex:1; min-width:200px; margin-bottom:0;">
