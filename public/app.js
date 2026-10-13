@@ -130,9 +130,11 @@ function rotear() {
   } else if (view === 'numeros') {
     mostrarView('numeros');
     carregarTelaDeNumeros();
-  } else if (['novo', 'testar', 'codigo', 'config', 'relatorio', 'metricas', 'backup'].includes(view)) {
+  } else if (['novo', 'testar', 'codigo', 'config', 'mais', 'relatorio', 'metricas', 'backup'].includes(view)) {
     mostrarView(view);
-    if (view === 'config') carregarConfig();
+    // "#config/mensagens" cai direto na aba certa. Sem isso, os atalhos do topo
+    // abririam sempre em Identidade e voce teria que achar a aba na mao.
+    if (view === 'config') carregarConfig(param);
     if (view === 'relatorio') prepararRelatorio();
     if (view === 'metricas') carregarMetricas();
   } else if (view === 'leads') {
@@ -1383,7 +1385,15 @@ document.getElementById('btn-bloquear-numero').addEventListener('click', async (
   }
 });
 
-async function carregarConfig() {
+// Abre a aba pedida pela URL. Os atalhos do topo ja chegam na aba certa, em
+// vez de largar voce na Identidade pra procurar.
+function abrirAbaDeConfig(nome) {
+  const aba = document.querySelector('#abas-config .aba[data-painel="' + nome + '"]');
+  if (aba) aba.click();
+}
+
+async function carregarConfig(abaInicial) {
+  if (abaInicial) abrirAbaDeConfig(abaInicial);
   // Entrar na tela sempre consulta a Z-API de novo: o número pode ter caído
   // desde a última vez que você olhou. O cache serve só pros re-renders de
   // dentro da própria tela.

@@ -34,7 +34,7 @@ router.post('/testar-mensagem', async (req, res) => {
 
   if (numeroEstaBloqueado(telefone)) return res.status(400).json({ erro: BLOQUEADO });
 
-  const texto = montarMensagemDeAbertura(nome);
+  const texto = montarMensagemDeAbertura(nome, { avancarRodizio: false });
   if (!texto) return res.status(400).json({ erro: SEM_MENSAGEM });
 
   try {
@@ -54,7 +54,7 @@ router.post('/testar-mensagem', async (req, res) => {
 
 router.post('/simular/iniciar', (req, res) => {
   const nome = (req.body?.nome || '').trim();
-  const texto = montarMensagemDeAbertura(nome);
+  const texto = montarMensagemDeAbertura(nome, { avancarRodizio: false });
   if (!texto) return res.status(400).json({ erro: SEM_MENSAGEM });
   res.json({ resposta: texto, encaminharHumano: false });
 });
@@ -87,7 +87,7 @@ router.post('/testar-whatsapp', async (req, res) => {
 
   if (numeroEstaBloqueado(telefone)) return res.status(400).json({ erro: BLOQUEADO });
 
-  const texto = montarMensagemDeAbertura(nome);
+  const texto = montarMensagemDeAbertura(nome, { avancarRodizio: false });
   if (!texto) return res.status(400).json({ erro: SEM_MENSAGEM });
 
   try {

@@ -24,12 +24,9 @@
       <img class="logo" src="https://image.typedream.com/cdn-cgi/image/width=320,format=auto,fit=scale-down,quality=90/https://api.typedream.com/v0/document/public/8f0e2672-b7b0-4606-a32b-782b9974fadb/34uE5nBTIZhBnmZx3uEclGlfjMy_logo_1.png" alt="FourAgro">
       <div class="acoes">
         <a class="botao secundario" href="#numeros" id="link-numeros" style="display:none;">Números</a>
-        <a class="botao secundario" href="#config">Configurações</a>
-        <a class="botao secundario" href="#testar">Testar mensagem</a>
-        <a class="botao secundario" href="#metricas">Métricas</a>
-        <a class="botao secundario" href="#relatorio">Relatório diário</a>
-        <a class="botao secundario" href="#backup">Backup</a>
-        <a class="botao secundario" href="#codigo">Código de acesso</a>
+        <a class="botao secundario" href="#config/whatsapps">WhatsApps</a>
+        <a class="botao secundario" href="#config/mensagens">Mensagens</a>
+        <a class="botao secundario" href="#mais">Mais</a>
         <a class="botao" href="#novo">+ Novo lead</a>
       </div>
     </div>
@@ -40,6 +37,52 @@
   </header>
 
   <main class="container">
+
+    <!-- VIEW: mais opções (tudo que não é do dia a dia) -->
+    <section id="view-mais" class="view" style="display:none;">
+      <a class="voltar" href="#leads">← Voltar pros leads</a>
+      <p class="dica" style="margin: 0 0 20px;">
+        O que você configura uma vez e quase não mexe depois.
+      </p>
+      <div class="grade-numeros">
+        <a class="cartao-numero" href="#config/identidade">
+          <span class="apelido">Quem você é</span>
+          <span class="conexao"><span class="ponto"></span>seu nome, empresa e o que você faz</span>
+        </a>
+        <a class="cartao-numero" href="#config/regras">
+          <span class="apelido">Regras da conversa</span>
+          <span class="conexao"><span class="ponto"></span>o que a IA pode e não pode dizer</span>
+        </a>
+        <a class="cartao-numero" href="#config/horarios">
+          <span class="apelido">Horários de envio</span>
+          <span class="conexao"><span class="ponto"></span>quando as mensagens podem sair</span>
+        </a>
+        <a class="cartao-numero" href="#config/bloqueios">
+          <span class="apelido">Bloqueios</span>
+          <span class="conexao"><span class="ponto"></span>quem pediu pra não receber mais</span>
+        </a>
+        <a class="cartao-numero" href="#testar">
+          <span class="apelido">Testar mensagem</span>
+          <span class="conexao"><span class="ponto"></span>ver como chega no WhatsApp</span>
+        </a>
+        <a class="cartao-numero" href="#metricas">
+          <span class="apelido">Métricas</span>
+          <span class="conexao"><span class="ponto"></span>taxa de retorno e reuniões</span>
+        </a>
+        <a class="cartao-numero" href="#relatorio">
+          <span class="apelido">Relatório diário</span>
+          <span class="conexao"><span class="ponto"></span>o que aconteceu num dia</span>
+        </a>
+        <a class="cartao-numero" href="#backup">
+          <span class="apelido">Backup</span>
+          <span class="conexao"><span class="ponto"></span>baixar e restaurar tudo</span>
+        </a>
+        <a class="cartao-numero" href="#codigo">
+          <span class="apelido">Código de acesso</span>
+          <span class="conexao"><span class="ponto"></span>trocar a senha do painel</span>
+        </a>
+      </div>
+    </section>
 
     <!-- VIEW: escolha do número (tela inicial quando há mais de um) -->
     <section id="view-numeros" class="view" style="display:none;">

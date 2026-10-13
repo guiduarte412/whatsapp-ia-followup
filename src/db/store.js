@@ -139,27 +139,51 @@ function salvarConfig(parcial) {
 // do lead. Devolve null se nao houver nenhuma mensagem cadastrada - quem
 // chama decide o que fazer (o agendador avisa voce em vez de inventar
 // texto por conta propria).
-function sortearMensagem(lista, nomeDoLead) {
-  const validas = (lista || []).filter((m) => m && m.trim());
-  if (!validas.length) return null;
-  const escolhida = validas[Math.floor(Math.random() * validas.length)];
+// Troca {nome} pelo primeiro nome e limpa o que sobra quando nao ha nome.
+function aplicarNome(texto, nomeDoLead) {
   const primeiroNome = (nomeDoLead || '').trim().split(' ')[0] || '';
-  return escolhida
-    .replace(/\{nome\}/gi, primeiroNome)
+  return texto
+    .replace(/{nome}/gi, primeiroNome)
     // Sem nome cadastrado, {nome} vira vazio e sobraria "Oi , tudo bem?" -
     // limpa o espaco orfao antes da pontuacao e os espacos duplicados.
-    .replace(/ +([,.!?;:])/g, '$1')
+    .replace(/ +([,.!?;:])/g, '')
     .replace(/ {2,}/g, ' ')
     .trim();
 }
 
-function montarMensagemDeAbertura(nomeDoLead) {
-  return sortearMensagem(getConfig().mensagens, nomeDoLead);
+// As mensagens cadastradas giram em RODIZIO, uma por lead, em vez de serem
+// sorteadas. Cada cliente continua recebendo uma mensagem so - nunca todas -
+// mas o sorteio aleatorio podia repetir o mesmo texto em varios leads
+// seguidos por azar, que e justamente o padrao que o WhatsApp associa a
+// disparo em massa. Com o rodizio, as 8 mensagens sao usadas por igual.
+//
+// O ponteiro fica no banco (nao na memoria) pra continuar de onde parou
+// depois de um deploy - senao todo reinicio recomecaria na primeira mensagem.
+//
+// "avancar: false" le a proxima sem consumir a vez: e o caso das telas de
+// teste, que nao podem gastar uma posicao do rodizio de verdade.
+function proximaMensagem(lista, nomeDoLead, chaveDoPonteiro, avancar = true) {
+  const validas = (lista || []).filter((m) => m && m.trim());
+  if (!validas.length) return null;
+
+  const db = load();
+  const posicao = (Number(db[chaveDoPonteiro]) || 0) % validas.length;
+
+  if (avancar) {
+    db[chaveDoPonteiro] = posicao + 1;
+    save(db);
+  }
+
+  return aplicarNome(validas[posicao], nomeDoLead);
+}
+
+function montarMensagemDeAbertura(nomeDoLead, { avancarRodizio = true } = {}) {
+  return proximaMensagem(getConfig().mensagens, nomeDoLead, 'ultimaMensagemIndice', avancarRodizio);
 }
 
 // Mensagem da 2a tentativa, pra quem nao respondeu a abertura.
-function montarMensagemDeFollowup(nomeDoLead) {
-  return sortearMensagem(getConfig().mensagensFollowup, nomeDoLead);
+function montarMensagemDeFollowup(nomeDoLead, { avancarRodizio = true } = {}) {
+  return proximaMensagem(getConfig().mensagensFollowup, nomeDoLead, 'ultimaMensagemFollowupIndice', avancarRodizio);
 }
 
 // A 2a tentativa existe quando ha pelo menos uma mensagem de follow-up
