@@ -147,8 +147,86 @@ function formatarAvisoLead({ nome, telefone, contexto }) {
   return `Lead: ${nome || 'sem nome'}\nNúmero: ${telefone}\nHorário: ${horario}\n\n${contexto}`;
 }
 
+
+// --- Mensagem com as duas opcoes (parar / falar com voce) ---
+//
+// Os botoes do WhatsApp sao instaveis fora da API oficial: a propria Z-API
+// avisa que o funcionamento depende de a conta ser normal ou business, de o
+// destino ser chat ou grupo, e que cada atualizacao do WhatsApp pode quebrar
+// o recurso. Por isso o envio tem rede de seguranca: se o botao for recusado,
+// a MESMA mensagem sai como texto pedindo "responda 1 ou 2". O que nao pode
+// acontecer e a mensagem nao sair - sem ela o lead nunca entra na esteira.
+const OPCAO_PARAR = '1';
+const OPCAO_FALAR = '2';
+const ROTULO_PARAR = 'Não quero receber mais';
+const ROTULO_FALAR = 'Quero falar com você';
+
+function textoComAsOpcoes(mensagem) {
+  return `${mensagem}\n\n${OPCAO_PARAR} - ${ROTULO_PARAR}\n${OPCAO_FALAR} - ${ROTULO_FALAR}\n\nÉ só responder com o número.`;
+}
+
+async function enviarComBotoes(telefone, mensagem, conexao) {
+  const { instanceId, token, clientToken } = credenciais(conexao);
+  return axios.post(
+    `https://api.z-api.io/instances/${instanceId}/token/${token}/send-button-actions`,
+    {
+      phone: telefone,
+      message: mensagem,
+      buttonActions: [
+        { id: OPCAO_PARAR, type: 'REPLY', label: ROTULO_PARAR },
+        { id: OPCAO_FALAR, type: 'REPLY', label: ROTULO_FALAR },
+      ],
+    },
+    { headers: { 'Client-Token': clientToken }, timeout: TIMEOUT_ENVIO_MS }
+  );
+}
+
+// Devolve { comoFoi: 'botoes' | 'texto', texto } pra quem chama registrar no
+// historico exatamente o que a pessoa recebeu.
+async function enviarMensagemComOpcoes(telefone, mensagem, conexao) {
+  // As duas formas entram no registro de eco: a que sai com botao leva so a
+  // mensagem, a de texto leva as opcoes junto.
+  registrarEnvioProprio(mensagem);
+  registrarEnvioProprio(textoComAsOpcoes(mensagem));
+
+  try {
+    await enviarComBotoes(telefone, mensagem, conexao);
+    return { comoFoi: 'botoes', texto: mensagem };
+  } catch (erro) {
+    const motivo = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+    console.warn(`Botoes recusados para ${telefone} (${motivo}) - mandando as opcoes em texto.`);
+  }
+
+  const texto = textoComAsOpcoes(mensagem);
+  await enviarMensagem(telefone, texto, conexao);
+  return { comoFoi: 'texto', texto };
+}
+
+// Le a escolha do lead, venha ela de botao, de lista de opcoes ou digitada.
+// Com o fallback de texto as tres formas convivem, e quem digita "1" sem ter
+// visto botao nenhum tambem e atendido.
+function escolhaDoLead(payload, textoRecebido) {
+  const idDoBotao = payload?.buttonsResponseMessage?.buttonId
+    || payload?.listResponseMessage?.selectedRowId;
+  if (idDoBotao === OPCAO_PARAR) return 'parar';
+  if (idDoBotao === OPCAO_FALAR) return 'falar';
+
+  // Digitado: aceita so a resposta seca ("1", "2.", "opcao 2"), nunca um
+  // numero perdido no meio de uma frase - "consigo as 2 horas" nao e escolha.
+  const limpo = (textoRecebido || '').trim().toLowerCase().replace(/[.!)\]]+$/, '');
+  if (/^(op[cç][aã]o )?1$/.test(limpo)) return 'parar';
+  if (/^(op[cç][aã]o )?2$/.test(limpo)) return 'falar';
+
+  if (limpo === ROTULO_PARAR.toLowerCase()) return 'parar';
+  if (limpo === ROTULO_FALAR.toLowerCase()) return 'falar';
+
+  return null;
+}
+
 module.exports = {
   enviarMensagem,
+  enviarMensagemComOpcoes,
+  escolhaDoLead,
   foiEnviadaPorNos,
   avisarConsultor,
   formatarAvisoLead,

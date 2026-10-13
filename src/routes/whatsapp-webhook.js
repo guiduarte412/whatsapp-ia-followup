@@ -1,6 +1,6 @@
 const express = require('express');
 const { getLeadFlexivel, upsertLead, appendConversa, getPausado, getConfig, getWhatsappPorId, numeroEstaBloqueado, bloquearNumero } = require('../db/store');
-const { avisarConsultor, enviarMensagem, formatarAvisoLead, foiEnviadaPorNos } = require('../services/whatsapp');
+const { avisarConsultor, enviarMensagem, formatarAvisoLead, foiEnviadaPorNos, escolhaDoLead } = require('../services/whatsapp');
 const { responderConversa } = require('../services/claude');
 const { extrairTexto } = require('../services/media');
 const { pediuParaParar, respostaDeDespedida } = require('../services/optout');
@@ -209,6 +209,39 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
   // Vale tambem pra quem escreve ANTES da abertura sair: se a pessoa ja
   // puxou conversa, mandar a mensagem de abertura depois nao faz sentido.
   if (lead.proximoEnvioEm) upsertLead(telefoneLead, { proximoEnvioEm: null });
+
+  // --- A escolha do lead entre as duas opcoes ---
+  //
+  // Clicou no botao (ou digitou 1 / 2). Resolvido aqui, antes da IA: quem
+  // escolheu sair nao espera um modelo concordar, e quem pediu pra falar com
+  // voce quer falar com VOCE - nao com a automacao.
+  const escolha = escolhaDoLead(payload, textoRecebido);
+
+  if (escolha === 'parar') {
+    appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
+    await registrarDescadastro({
+      lead,
+      telefone: telefoneLead,
+      textoRecebido,
+      conexao,
+      despedida: respostaDeDespedida(lead.nome),
+    });
+    return res.status(200).json({ ok: true, descadastrado: true });
+  }
+
+  if (escolha === 'falar') {
+    appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
+    // A IA nao entra: a conversa e sua daqui pra frente.
+    upsertLead(telefoneLead, { status: 'human_handoff', proximoEnvioEm: null });
+    await avisarConsultor(formatarAvisoLead({
+      nome: lead.nome,
+      telefone: telefoneLead,
+      contexto: 'Pediu pra falar com você. A IA não respondeu nada - '
+        + 'é só chamar a pessoa no WhatsApp pra continuar daqui.',
+    }), conexao).catch(() => {});
+    console.log(`Lead ${telefoneLead} escolheu falar com o consultor - passado pra humano.`);
+    return res.status(200).json({ ok: true, querFalar: true });
+  }
 
   // Pedido de descadastro escrito com todas as letras. Resolvido aqui, antes
   // da IA: quem pediu pra parar nao precisa esperar um modelo concordar, e

@@ -28,6 +28,12 @@ async function baixarBase64(url) {
 // whatsapp-webhook.js tratar esse caso separadamente (avisar o consultor
 // em vez de deixar a IA "inventar" uma resposta sem saber o que foi dito).
 async function extrairTexto(payload) {
+  // Clique em botao ou em item de lista: o texto escolhido vem em campo
+  // proprio, nao em text.message. Sem isso o historico guardaria
+  // "mensagem sem texto reconhecido" no lugar da resposta da pessoa.
+  if (payload?.buttonsResponseMessage?.message) return payload.buttonsResponseMessage.message;
+  if (payload?.listResponseMessage?.message) return payload.listResponseMessage.message;
+
   if (payload?.text?.message) return payload.text.message;
   if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message;
 

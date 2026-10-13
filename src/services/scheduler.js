@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { getLeadsParaEnvio, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, montarMensagemDeFollowup, followupEstaAtivo, getWhatsappPorId, numeroEstaBloqueado } = require('../db/store');
-const { enviarMensagem, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
+const { enviarMensagemComOpcoes, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
 
 // A esteira tem no maximo DUAS mensagens: a abertura e, pra quem nao
 // respondeu, uma segunda tentativa. O texto das duas e sorteado entre as que
@@ -131,8 +131,12 @@ async function processarLead(lead) {
     return false;
   }
 
+  // Vai com os dois botoes (parar / falar com voce). Se o WhatsApp recusar
+  // o botao, a propria funcao manda as mesmas opcoes em texto - o texto que
+  // a pessoa recebeu de fato volta aqui pra entrar no historico certo.
+  let enviado;
   try {
-    await enviarMensagem(lead.phone, mensagem, conexao);
+    enviado = await enviarMensagemComOpcoes(lead.phone, mensagem, conexao);
   } catch (erro) {
     // Nao deixa a falha passar em silencio esperando o proximo ciclo pra
     // sempre - avisa uma vez (nao repete a cada ciclo) que esse lead esta
@@ -149,7 +153,7 @@ async function processarLead(lead) {
     throw erro;
   }
 
-  appendConversa(lead.phone, { de: 'ia', texto: mensagem });
+  appendConversa(lead.phone, { de: 'ia', texto: enviado.texto });
 
   const tentativasFeitas = (lead.attemptsSent || 0) + 1;
 
@@ -166,7 +170,7 @@ async function processarLead(lead) {
   // quando tem algo pra voce fazer.
   upsertLead(lead.phone, {
     attemptsSent: tentativasFeitas,
-    mensagensEnviadas: [...(lead.mensagensEnviadas || []), mensagem],
+    mensagensEnviadas: [...(lead.mensagensEnviadas || []), enviado.texto],
     proximoEnvioEm: agendarFollowup ? sortearMomentoDoFollowup() : null,
     avisoFalhaEnviado: false,
     status: 'aguardando_resposta',
