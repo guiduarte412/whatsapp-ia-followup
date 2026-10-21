@@ -131,9 +131,9 @@ async function processarLead(lead) {
     return false;
   }
 
-  // Vai com os dois botoes (parar / falar com voce). Se o WhatsApp recusar
-  // o botao, a propria funcao manda as mesmas opcoes em texto - o texto que
-  // a pessoa recebeu de fato volta aqui pra entrar no historico certo.
+  // Vai como texto, com as duas opcoes (parar / falar com voce) escritas no
+  // fim pra pessoa responder 1 ou 2. O texto que ela recebeu de fato volta
+  // aqui pra entrar no historico certo.
   let enviado;
   try {
     enviado = await enviarMensagemComOpcoes(lead.phone, mensagem, conexao);

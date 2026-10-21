@@ -375,20 +375,19 @@
           <button type="button" class="botao secundario" id="btn-add-followup" style="margin-top:16px;">+ Adicionar mensagem de segunda tentativa</button>
           </div>
 
-          <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:28px;">
-            <div class="campo" style="flex:1; min-width:200px; margin-bottom:0;">
-              <label for="cfg-followup-min">Esperar no mínimo, em horas</label>
-              <input type="number" id="cfg-followup-min" min="1" max="720">
-            </div>
-            <div class="campo" style="flex:1; min-width:200px; margin-bottom:0;">
-              <label for="cfg-followup-max">Esperar no máximo, em horas</label>
-              <input type="number" id="cfg-followup-max" min="1" max="720">
-            </div>
+          <div class="campo" style="margin-top:28px;">
+            <label for="cfg-followup-espera">Quanto esperar depois da primeira mensagem</label>
+            <select id="cfg-followup-espera">
+              <option value="4-8">4 a 8 horas — ainda no mesmo dia</option>
+              <option value="24-36">24 a 36 horas — no dia seguinte</option>
+              <option value="48-72">2 a 3 dias</option>
+              <option value="72-120">3 a 5 dias</option>
+            </select>
           </div>
           <p class="dica">
-            Contado a partir da primeira mensagem. A espera de cada lead é sorteada dentro
-            dessa faixa, pra os follow-ups não saírem todos no mesmo horário. 48 a 72 horas
-            é um intervalo seguro; menos de um dia costuma soar como cobrança.
+            A espera de cada lead é sorteada dentro da faixa, pra as segundas tentativas
+            não saírem todas no mesmo horário. Nada sai fora da janela de horário
+            configurada — se a hora cair às 2h da manhã, ela espera abrir.
           </p>
         </div>
 
@@ -415,33 +414,35 @@
             <label for="cfg-hora-fim">Para de enviar às</label>
             <input type="number" id="cfg-hora-fim" min="0" max="23">
           </div>
-          <p class="dica">
-            Quando um lead entra, a mensagem dele não sai na hora — sai num momento
-            sorteado dentro da faixa abaixo. Faixa mais larga espalha mais os
-            disparos e tira a cara de robô. Se você importa planilhas grandes de
-            uma vez, vale aumentar bastante o máximo.
-          </p>
           <div class="campo">
-            <label for="cfg-atraso-min">Espera mínima, em minutos</label>
-            <input type="number" id="cfg-atraso-min" min="0" max="1440">
+            <label for="cfg-atraso">Quando um lead entra, a mensagem dele sai em</label>
+            <select id="cfg-atraso">
+              <option value="0-0">Na hora</option>
+              <option value="5-15">5 a 15 minutos</option>
+              <option value="30-60">30 a 60 minutos</option>
+              <option value="60-120">1 a 2 horas</option>
+            </select>
+            <p class="dica">
+              Não sai num tempo fixo: o sistema sorteia um momento dentro dessa
+              faixa, lead a lead. Importou uma planilha às 14h? Os leads dela
+              começam a sair logo, dentro dessa janela.
+            </p>
           </div>
           <div class="campo">
-            <label for="cfg-atraso-max">Espera máxima, em minutos</label>
-            <input type="number" id="cfg-atraso-max" min="0" max="1440">
-          </div>
-          <p class="dica">
-            E quando chega a hora de vários leads ao mesmo tempo, as mensagens
-            não saem emendadas: o sistema dá uma pausa entre uma e outra. É o que
-            evita que uma planilha grande vire uma rajada de disparos — o padrão
-            que mais derruba número no WhatsApp.
-          </p>
-          <div class="campo">
-            <label for="cfg-intervalo-min">Pausa mínima entre envios, em segundos</label>
-            <input type="number" id="cfg-intervalo-min" min="0" max="3600">
-          </div>
-          <div class="campo">
-            <label for="cfg-intervalo-max">Pausa máxima entre envios, em segundos</label>
-            <input type="number" id="cfg-intervalo-max" min="0" max="3600">
+            <label for="cfg-intervalo">Pausa entre um lead e o próximo</label>
+            <select id="cfg-intervalo">
+              <option value="20-60">20 a 60 segundos — rápido</option>
+              <option value="60-180">1 a 3 minutos</option>
+              <option value="180-300">3 a 5 minutos</option>
+              <option value="300-600">5 a 10 minutos — bem devagar</option>
+            </select>
+            <p class="dica">
+              Quando chega a hora de vários leads ao mesmo tempo, as mensagens não
+              saem emendadas. É o que evita que uma planilha grande vire uma rajada
+              de disparos — o padrão que mais derruba número no WhatsApp. A pausa é
+              por número: com dois números cadastrados, o total sai no dobro da
+              velocidade sem que nenhum deles acelere.
+            </p>
           </div>
           <div class="campo">
             <label for="cfg-max-respostas">Máximo de respostas automáticas seguidas</label>

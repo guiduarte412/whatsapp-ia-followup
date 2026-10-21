@@ -150,12 +150,28 @@ function formatarAvisoLead({ nome, telefone, contexto }) {
 
 // --- Mensagem com as duas opcoes (parar / falar com voce) ---
 //
-// Os botoes do WhatsApp sao instaveis fora da API oficial: a propria Z-API
-// avisa que o funcionamento depende de a conta ser normal ou business, de o
-// destino ser chat ou grupo, e que cada atualizacao do WhatsApp pode quebrar
-// o recurso. Por isso o envio tem rede de seguranca: se o botao for recusado,
-// a MESMA mensagem sai como texto pedindo "responda 1 ou 2". O que nao pode
-// acontecer e a mensagem nao sair - sem ela o lead nunca entra na esteira.
+// As opcoes vao como TEXTO ("responda 1 ou 2"), nunca como botao do WhatsApp.
+//
+// Ja foi com botao (send-button-actions) e o resultado foi o pior tipo de
+// falha: a Z-API aceitava a chamada e respondia sucesso, o lead era marcado
+// como atendido no painel, e a mensagem simplesmente nao chegava no celular
+// de ninguem. Nao aparecia erro em log nenhum, porque do ponto de vista do
+// sistema deu tudo certo.
+//
+// Havia uma rede de seguranca que trocava botao por texto, mas ela so
+// disparava quando a Z-API RECUSAVA o envio - e o caso real era a Z-API
+// aceitando. Rede de seguranca que depende de um erro nao cobre a falha
+// silenciosa, que e justamente a perigosa.
+//
+// A propria documentacao da Z-API avisa que botao fora da API oficial e
+// instavel (depende de a conta ser normal ou business, de o destino ser chat
+// ou grupo, e cada atualizacao do WhatsApp pode quebrar):
+// https://developer.z-api.io/tips/button-status
+//
+// Texto puro nao tem esse risco. Perde-se o botao clicavel; ganha-se a
+// certeza de que a mensagem chega - que e o unico ponto que importa aqui.
+// escolhaDoLead() continua entendendo "1" e "2" digitados, e tambem resposta
+// de botao, caso algum lead antigo ainda responda uma mensagem dessas.
 const OPCAO_PARAR = '1';
 const OPCAO_FALAR = '2';
 const ROTULO_PARAR = 'Não quero receber mais';
@@ -165,39 +181,16 @@ function textoComAsOpcoes(mensagem) {
   return `${mensagem}\n\n${OPCAO_PARAR} - ${ROTULO_PARAR}\n${OPCAO_FALAR} - ${ROTULO_FALAR}\n\nÉ só responder com o número.`;
 }
 
-async function enviarComBotoes(telefone, mensagem, conexao) {
-  const { instanceId, token, clientToken } = credenciais(conexao);
-  return axios.post(
-    `https://api.z-api.io/instances/${instanceId}/token/${token}/send-button-actions`,
-    {
-      phone: telefone,
-      message: mensagem,
-      buttonActions: [
-        { id: OPCAO_PARAR, type: 'REPLY', label: ROTULO_PARAR },
-        { id: OPCAO_FALAR, type: 'REPLY', label: ROTULO_FALAR },
-      ],
-    },
-    { headers: { 'Client-Token': clientToken }, timeout: TIMEOUT_ENVIO_MS }
-  );
-}
-
-// Devolve { comoFoi: 'botoes' | 'texto', texto } pra quem chama registrar no
-// historico exatamente o que a pessoa recebeu.
+// Devolve { comoFoi: 'texto', texto } pra quem chama registrar no historico
+// exatamente o que a pessoa recebeu.
 async function enviarMensagemComOpcoes(telefone, mensagem, conexao) {
-  // As duas formas entram no registro de eco: a que sai com botao leva so a
-  // mensagem, a de texto leva as opcoes junto.
-  registrarEnvioProprio(mensagem);
-  registrarEnvioProprio(textoComAsOpcoes(mensagem));
-
-  try {
-    await enviarComBotoes(telefone, mensagem, conexao);
-    return { comoFoi: 'botoes', texto: mensagem };
-  } catch (erro) {
-    const motivo = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
-    console.warn(`Botoes recusados para ${telefone} (${motivo}) - mandando as opcoes em texto.`);
-  }
-
   const texto = textoComAsOpcoes(mensagem);
+
+  // Registra as duas formas no controle de eco: a mensagem sai com as opcoes
+  // juntas, mas o eco da Z-API as vezes volta so com o texto base.
+  registrarEnvioProprio(mensagem);
+  registrarEnvioProprio(texto);
+
   await enviarMensagem(telefone, texto, conexao);
   return { comoFoi: 'texto', texto };
 }

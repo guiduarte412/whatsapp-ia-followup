@@ -46,17 +46,27 @@ const CONFIG_PADRAO = {
   mensagensFollowup: [],
   regras: [],       // regras que a IA precisa seguir na conversa
   horarios: {
-    inicio: 8,            // hora em que os envios podem comecar (Brasilia)
-    fim: 20,              // hora em que os envios param (Brasilia)
-    atrasoMinMinutos: 30, // atraso minimo entre o lead entrar e a mensagem sair
-    atrasoMaxMinutos: 60, // atraso maximo (sorteado entre min e max)
-    intervaloMinSegundos: 20, // pausa minima entre um envio e o proximo
-    intervaloMaxSegundos: 60, // pausa maxima (sorteada entre min e max)
-    followupHorasMin: 48, // espera minima entre a abertura e a 2a tentativa
-    followupHorasMax: 72, // espera maxima (sorteada entre min e max)
+    inicio: 7,            // hora em que os envios podem comecar (Brasilia)
+    fim: 21,              // hora em que os envios param (Brasilia)
+    atrasoMinMinutos: 5,  // atraso minimo entre o lead entrar e a mensagem sair
+    atrasoMaxMinutos: 15, // atraso maximo (sorteado entre min e max)
+    intervaloMinSegundos: 60,  // pausa minima entre um envio e o proximo
+    intervaloMaxSegundos: 180, // pausa maxima (sorteada entre min e max)
+    followupHorasMin: 24, // espera minima entre a abertura e a 2a tentativa
+    followupHorasMax: 36, // espera maxima (sorteada entre min e max)
   },
   maxRespostasAutomaticas: 5, // trava: depois disso a IA passa a conversa pra voce
 };
+
+// Versao atual do bloco de horarios. Serve pra UMA coisa so: quando os
+// padroes aqui no codigo mudam, o db.json que ja esta em producao continua
+// com os valores antigos salvos - e valor salvo ganha do padrao na mesclagem
+// abaixo. Sem isso, mudar os numeros aqui nao mudaria nada no ar.
+//
+// Subir esse numero faz o sistema reescrever os horarios UMA vez, com os
+// padroes novos, e marcar que ja fez. Depois disso o que voce editar na tela
+// de Configuracoes e respeitado normalmente.
+const VERSAO_HORARIOS = 2;
 
 // Junta o que esta salvo com os padroes, campo a campo. Assim um banco
 // antigo (ou um backup restaurado de uma versao anterior) nunca chega no
@@ -70,13 +80,20 @@ function mesclarConfig(salva) {
     mensagensFollowup: Array.isArray(c.mensagensFollowup) ? c.mensagensFollowup : [],
     regras: Array.isArray(c.regras) ? c.regras : [],
     horarios: { ...CONFIG_PADRAO.horarios, ...(c.horarios || {}) },
+    versaoHorarios: Number(c.versaoHorarios) || 1,
     maxRespostasAutomaticas: Number(c.maxRespostasAutomaticas) || CONFIG_PADRAO.maxRespostasAutomaticas,
   };
 }
 
 function load() {
   if (!fs.existsSync(DB_PATH)) {
-    return { leads: {}, codigoAcesso: CODIGO_ACESSO_PADRAO, config: mesclarConfig(null) };
+    // Instalacao nova: ja nasce na versao atual, senao a migracao abaixo
+    // rodaria uma vez à toa no primeiro acesso.
+    return {
+      leads: {},
+      codigoAcesso: CODIGO_ACESSO_PADRAO,
+      config: mesclarConfig({ versaoHorarios: VERSAO_HORARIOS }),
+    };
   }
   let db;
   try {
@@ -95,6 +112,17 @@ function load() {
   if (!db.leads) db.leads = {};
   if (!db.codigoAcesso) db.codigoAcesso = CODIGO_ACESSO_PADRAO;
   db.config = mesclarConfig(db.config);
+
+  // Migracao dos horarios (ver VERSAO_HORARIOS). Grava na hora, senao
+  // rodaria de novo a cada leitura e sobrescreveria pra sempre o que voce
+  // editar na tela.
+  if (db.config.versaoHorarios < VERSAO_HORARIOS) {
+    db.config.horarios = { ...CONFIG_PADRAO.horarios };
+    db.config.versaoHorarios = VERSAO_HORARIOS;
+    save(db);
+    console.log('Horários atualizados para os padrões novos (migração ' + VERSAO_HORARIOS + ').');
+  }
+
   return db;
 }
 
@@ -127,6 +155,10 @@ function salvarConfig(parcial) {
     mensagensFollowup: parcial.mensagensFollowup !== undefined ? parcial.mensagensFollowup : atual.mensagensFollowup,
     regras: parcial.regras !== undefined ? parcial.regras : atual.regras,
     horarios: { ...atual.horarios, ...(parcial.horarios || {}) },
+    // Precisa vir junto: sem isso a config salva voltaria pra versao 1 e a
+    // migracao rodaria de novo na proxima leitura, jogando fora exatamente
+    // os horarios que voce acabou de salvar.
+    versaoHorarios: atual.versaoHorarios,
     maxRespostasAutomaticas: parcial.maxRespostasAutomaticas !== undefined
       ? parcial.maxRespostasAutomaticas
       : atual.maxRespostasAutomaticas,

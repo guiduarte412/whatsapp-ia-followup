@@ -1475,6 +1475,39 @@ function abrirAbaDeConfig(nome) {
   if (aba) aba.click();
 }
 
+// As faixas (de X a Y) viraram uma lista de escolha só, em vez de dois campos
+// de número. O valor de cada opção é "min-max" — é ele que vira os dois
+// campos de volta na hora de salvar.
+//
+// Se o que está salvo não bater com nenhuma opção (um valor antigo, ou
+// ajustado na mão), a função ACRESCENTA uma opção com esse valor em vez de
+// escolher a mais próxima. Sem isso, só abrir a tela e salvar mudaria a
+// configuração sem você pedir.
+function selecionarFaixa(idSelect, min, max, unidade) {
+  const campo = document.getElementById(idSelect);
+  if (!campo) return;
+  const valor = `${Number(min)}-${Number(max)}`;
+
+  const existe = Array.from(campo.options).some((o) => o.value === valor);
+  if (!existe) {
+    const opcao = document.createElement('option');
+    opcao.value = valor;
+    opcao.textContent = `${min} a ${max} ${unidade} (atual)`;
+    campo.insertBefore(opcao, campo.firstChild);
+  }
+  campo.value = valor;
+}
+
+// Devolve [min, max] da opção escolhida. Volta [0, 0] se o campo sumir, em
+// vez de NaN — NaN iria parar no banco e quebraria o sorteio do agendador.
+function lerFaixa(idSelect) {
+  const campo = document.getElementById(idSelect);
+  if (!campo || !campo.value) return [0, 0];
+  const [min, max] = campo.value.split('-').map(Number);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 0];
+  return [min, max];
+}
+
 async function carregarConfig(abaInicial) {
   if (abaInicial) abrirAbaDeConfig(abaInicial);
   // Entrar na tela sempre consulta a Z-API de novo: o número pode ter caído
@@ -1498,15 +1531,12 @@ async function carregarConfig(abaInicial) {
   renderizarLista('cfg-followup', cfg.mensagensFollowup || []);
   renderizarLista('cfg-regra', cfg.regras);
 
-  document.getElementById('cfg-followup-min').value = cfg.horarios.followupHorasMin;
-  document.getElementById('cfg-followup-max').value = cfg.horarios.followupHorasMax;
+  selecionarFaixa('cfg-followup-espera', cfg.horarios.followupHorasMin, cfg.horarios.followupHorasMax, 'h');
+  selecionarFaixa('cfg-atraso', cfg.horarios.atrasoMinMinutos, cfg.horarios.atrasoMaxMinutos, 'min');
+  selecionarFaixa('cfg-intervalo', cfg.horarios.intervaloMinSegundos, cfg.horarios.intervaloMaxSegundos, 's');
 
   document.getElementById('cfg-hora-inicio').value = cfg.horarios.inicio;
   document.getElementById('cfg-hora-fim').value = cfg.horarios.fim;
-  document.getElementById('cfg-atraso-min').value = cfg.horarios.atrasoMinMinutos;
-  document.getElementById('cfg-atraso-max').value = cfg.horarios.atrasoMaxMinutos;
-  document.getElementById('cfg-intervalo-min').value = cfg.horarios.intervaloMinSegundos;
-  document.getElementById('cfg-intervalo-max').value = cfg.horarios.intervaloMaxSegundos;
   document.getElementById('cfg-max-respostas').value = cfg.maxRespostasAutomaticas;
 
   carregarBloqueados();
@@ -1649,16 +1679,21 @@ document.getElementById('btn-salvar-config').addEventListener('click', async () 
     mensagens: valoresDe('cfg-mensagem').filter((t) => t.trim()),
     mensagensFollowup: valoresDe('cfg-followup').filter((t) => t.trim()),
     regras: valoresDe('cfg-regra').filter((t) => t.trim()),
-    horarios: {
-      inicio: Number(document.getElementById('cfg-hora-inicio').value),
-      fim: Number(document.getElementById('cfg-hora-fim').value),
-      atrasoMinMinutos: Number(document.getElementById('cfg-atraso-min').value),
-      atrasoMaxMinutos: Number(document.getElementById('cfg-atraso-max').value),
-      intervaloMinSegundos: Number(document.getElementById('cfg-intervalo-min').value),
-      intervaloMaxSegundos: Number(document.getElementById('cfg-intervalo-max').value),
-      followupHorasMin: Number(document.getElementById('cfg-followup-min').value),
-      followupHorasMax: Number(document.getElementById('cfg-followup-max').value),
-    },
+    horarios: (() => {
+      const [atrasoMin, atrasoMax] = lerFaixa('cfg-atraso');
+      const [intervaloMin, intervaloMax] = lerFaixa('cfg-intervalo');
+      const [followupMin, followupMax] = lerFaixa('cfg-followup-espera');
+      return {
+        inicio: Number(document.getElementById('cfg-hora-inicio').value),
+        fim: Number(document.getElementById('cfg-hora-fim').value),
+        atrasoMinMinutos: atrasoMin,
+        atrasoMaxMinutos: atrasoMax,
+        intervaloMinSegundos: intervaloMin,
+        intervaloMaxSegundos: intervaloMax,
+        followupHorasMin: followupMin,
+        followupHorasMax: followupMax,
+      };
+    })(),
     maxRespostasAutomaticas: Number(document.getElementById('cfg-max-respostas').value),
   };
 
