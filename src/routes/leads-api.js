@@ -1,8 +1,16 @@
 const express = require('express');
-const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead, upsertLead, normalizarTelefoneBR, getWhatsappPorId } = require('../db/store');
+const { getAllLeads, getLead, iniciarSequencia, iniciarSequenciaEmLote, removerLead, upsertLead, normalizarTelefoneBR, getWhatsappPorId, placarDoDia } = require('../db/store');
 
 const router = express.Router();
 router.use(express.json({ limit: '2mb' }));
+
+// Placar do dia: pessoas diferentes contatadas hoje, total de mensagens e o
+// teto configurado. Serve pra voce ver, antes de importar uma planilha
+// grande, quanto ainda cabe hoje - em vez de descobrir pelo log que metade
+// da fila ficou pra amanha.
+router.get('/placar-do-dia', (req, res) => {
+  res.json(placarDoDia());
+});
 
 // "?resumo=1" devolve os leads sem o histórico de conversa. O quadro se
 // recarrega sozinho a cada 30s e não usa nada disso - mandar a conversa

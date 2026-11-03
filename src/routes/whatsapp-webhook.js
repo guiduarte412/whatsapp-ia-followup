@@ -19,6 +19,39 @@ function normalizarTexto(valor) {
   return (valor || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+// O que a IA foi descobrindo sobre o lead ao longo da conversa (que bem ele
+// quer, pra quando, se aceita a incerteza da contemplacao).
+//
+// Mescla campo a campo, so preenchendo o que ainda estava vazio ou o que
+// veio novo - nunca apaga com null. Sem isso, a resposta em que a IA so
+// confirma o prazo zeraria o bem que o lead informou la atras, e voce
+// receberia o aviso sem a informacao que ja tinha sido conquistada.
+function mesclarQualificacao(anterior, nova) {
+  if (!nova) return anterior || null;
+  const base = anterior || {};
+  return {
+    bem: nova.bem || base.bem || null,
+    prazo: nova.prazo || base.prazo || null,
+    aceitaIncerteza: nova.aceitaIncerteza !== null && nova.aceitaIncerteza !== undefined
+      ? nova.aceitaIncerteza
+      : (base.aceitaIncerteza ?? null),
+  };
+}
+
+// Versao legivel da qualificacao, pro aviso que chega no seu WhatsApp. Com
+// isso voce chega na ligacao sabendo com quem vai falar, em vez de so
+// receber "lead quer falar com voce". Devolve string vazia quando nao ha
+// nada descoberto, pra nao poluir o aviso com rotulo sem conteudo.
+function textoQualificacao(qualificacao) {
+  if (!qualificacao) return '';
+  const linhas = [];
+  if (qualificacao.bem) linhas.push(`Interesse: ${qualificacao.bem}`);
+  if (qualificacao.prazo) linhas.push(`Prazo: ${qualificacao.prazo}`);
+  if (qualificacao.aceitaIncerteza === true) linhas.push('Entende que a contemplação não tem prazo certo: sim');
+  if (qualificacao.aceitaIncerteza === false) linhas.push('Entende que a contemplação não tem prazo certo: ainda não aceitou bem');
+  return linhas.length ? `\n\n${linhas.join('\n')}` : '';
+}
+
 // Configure essa URL como "webhook de mensagens recebidas" no painel da Z-API.
 // O formato exato do payload pode variar por versao da Z-API - confira a
 // documentacao atual e ajuste os campos abaixo se necessario.
@@ -333,25 +366,44 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
       return res.status(200).json({ ok: true, descadastrado: true });
     }
 
+    // O que a IA descobriu nesta troca. Mescla com o que ja estava
+    // guardado em vez de sobrescrever: se nesta mensagem ela so confirmou o
+    // prazo, isso nao pode apagar o bem que o lead informou tres mensagens
+    // atras.
+    const qualificacao = mesclarQualificacao(lead.qualificacao, resultado.qualificacao);
+
     if (resultado.horarioConfirmado) {
       // O proprio consultor (a IA falando por ele) ja aprovou um horario -
       // encerra o atendimento automatico e sai da lista de leads ativos.
-      upsertLead(telefoneLead, { status: 'encerrado', motivoEncerramento: 'horario_confirmado', respostasAutomaticas });
+      upsertLead(telefoneLead, { status: 'encerrado', motivoEncerramento: 'horario_confirmado', respostasAutomaticas, qualificacao });
       await avisarConsultor(formatarAvisoLead({
         nome: lead.nome,
         telefone: telefoneLead,
-        contexto: `Horário confirmado com o lead: ${resultado.resumoParaConsultor || resultado.resposta}\nAtendimento automático encerrado - adicione na sua agenda.`,
+        contexto: `Horário confirmado com o lead: ${resultado.resumoParaConsultor || resultado.resposta}`
+          + `${textoQualificacao(qualificacao)}\nAtendimento automático encerrado - adicione na sua agenda.`,
       }), conexao);
     } else if (resultado.encaminharHumano) {
-      upsertLead(telefoneLead, { status: 'human_handoff', respostasAutomaticas });
+      upsertLead(telefoneLead, { status: 'human_handoff', respostasAutomaticas, qualificacao, motivoEncerramento: 'encaminhado_pela_ia' });
       const contexto = resultado.resumoParaConsultor || resultado.motivo || 'a IA identificou que é hora de assumir';
       await avisarConsultor(formatarAvisoLead({
         nome: lead.nome,
         telefone: telefoneLead,
-        contexto: `${contexto}\nÚltima mensagem do lead: "${textoRecebido}"`,
+        contexto: `${contexto}${textoQualificacao(qualificacao)}\nÚltima mensagem do lead: "${textoRecebido}"`,
+      }), conexao);
+    } else if (respostasAutomaticas >= maxRespostas) {
+      // Gastou todas as respostas sem qualificar nem agendar. Antes isso
+      // caia em "conversa_ia" e o lead ficava parado sem ninguem saber:
+      // o teto e verificado ANTES de chamar a IA, entao ele nunca mais
+      // seria atendido, e tambem nunca aparecia como seu.
+      upsertLead(telefoneLead, { status: 'human_handoff', respostasAutomaticas, qualificacao, motivoEncerramento: 'limite_de_respostas' });
+      await avisarConsultor(formatarAvisoLead({
+        nome: lead.nome,
+        telefone: telefoneLead,
+        contexto: `A IA usou as ${maxRespostas} respostas e a conversa não chegou a agendamento.`
+          + `${textoQualificacao(qualificacao)}\nÚltima mensagem do lead: "${textoRecebido}"`,
       }), conexao);
     } else {
-      upsertLead(telefoneLead, { status: 'conversa_ia', respostasAutomaticas });
+      upsertLead(telefoneLead, { status: 'conversa_ia', respostasAutomaticas, qualificacao });
     }
 
     res.status(200).json({ ok: true });

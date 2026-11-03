@@ -54,6 +54,16 @@ const CONFIG_PADRAO = {
     intervaloMaxSegundos: 180, // pausa maxima (sorteada entre min e max)
     followupHorasMin: 24, // espera minima entre a abertura e a 2a tentativa
     followupHorasMax: 36, // espera maxima (sorteada entre min e max)
+    // Teto de PESSOAS DIFERENTES contatadas por dia, por numero. Conta
+    // abertura e 2a tentativa no mesmo balde: do lado de quem recebe, as
+    // duas sao "esse numero me mandou mensagem".
+    //
+    // O que derruba numero no WhatsApp e taxa de denuncia, nao volume
+    // absoluto - nao existe um numero magico publicado. 40 e um ponto de
+    // partida conservador pra numero que ja tem historico; se ninguem
+    // bloquear nem denunciar, sobe. Numero recem-conectado comeca bem
+    // abaixo disso.
+    limiteDiarioDestinatarios: 40,
   },
   maxRespostasAutomaticas: 5, // trava: depois disso a IA passa a conversa pra voce
 };
@@ -434,6 +444,55 @@ function getLeadsParaEnvio() {
   );
 }
 
+// Dia do calendario em Brasilia, no formato AAAA-MM-DD.
+//
+// O servidor roda em UTC: depois das 21h de Brasilia ja e o dia seguinte
+// pra ele. Contar "hoje" pelo relogio do servidor zeraria o teto diario no
+// meio da sua noite - e o teto existe pra proteger o numero, nao pra
+// reiniciar sozinho na hora errada. 'en-CA' da justamente AAAA-MM-DD.
+function diaEmBrasilia(data = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(data);
+}
+
+// Quantas PESSOAS DIFERENTES esse numero ja contatou hoje.
+//
+// Conta lead, nao mensagem: dois envios pro mesmo lead no mesmo dia sao uma
+// pessoa incomodada, nao duas. E o que importa pra reputacao do numero.
+function contarDestinatariosHoje(whatsappId = null) {
+  const hoje = diaEmBrasilia();
+  const db = load();
+  return Object.values(db.leads).filter((lead) => {
+    if ((lead.whatsappId || null) !== (whatsappId || null)) return false;
+    return (lead.enviosEm || []).some((quando) => diaEmBrasilia(new Date(quando)) === hoje);
+  }).length;
+}
+
+// Placar do dia pra tela: pessoas diferentes contatadas e total de
+// mensagens enviadas. Os dois numeros juntos porque so o segundo esconde o
+// que importa - 40 mensagens pra 20 pessoas e metade do incomodo de 40
+// mensagens pra 40 pessoas.
+function placarDoDia() {
+  const hoje = diaEmBrasilia();
+  const db = load();
+  let destinatarios = 0;
+  let mensagens = 0;
+
+  for (const lead of Object.values(db.leads)) {
+    const hojeDoLead = (lead.enviosEm || []).filter((quando) => diaEmBrasilia(new Date(quando)) === hoje);
+    if (hojeDoLead.length) {
+      destinatarios += 1;
+      mensagens += hojeDoLead.length;
+    }
+  }
+
+  return { dia: hoje, destinatarios, mensagens, limite: getConfig().horarios.limiteDiarioDestinatarios };
+}
+
 function getAllLeads() {
   const db = load();
   return Object.values(db.leads).sort((a, b) =>
@@ -660,6 +719,9 @@ module.exports = {
   getLeadFlexivel,
   upsertLead,
   getAllLeads,
+  diaEmBrasilia,
+  contarDestinatariosHoje,
+  placarDoDia,
   iniciarSequencia,
   iniciarSequenciaEmLote,
   removerLead,

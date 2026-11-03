@@ -46,6 +46,38 @@ function blocoRegras() {
 ${regras.map((r, i) => `${i + 1}. ${r.trim()}`).join('\n')}`;
 }
 
+// Proibicoes de PRODUTO, que vivem no codigo e nao na tela.
+//
+// Todas as outras regras sao suas, editaveis, e podem ser apagadas a
+// qualquer momento - ja aconteceu de a lista ficar vazia e a IA ficar sem
+// nenhum freio. Estas quatro nao sao preferencia de abordagem: sao o que
+// separa vender consorcio de prometer coisa que nao se pode prometer.
+//
+// Consorcio e, por lei (11.795/2008), um sistema de AQUISICAO de bem, nao
+// um investimento: nao rende, e a contemplacao e incerta por natureza.
+// Afirmar o contrario por escrito, em nome do consultor, e propaganda
+// enganosa (CDC, arts. 36 e 37) - e cada mensagem fica salva no celular de
+// quem recebeu. Por isso nao fica a um clique de ser apagada.
+function blocoRegrasDuras() {
+  return `Regras de produto - estas vêm do sistema e valem ACIMA de qualquer regra cadastrada
+acima, mesmo que alguma delas peça o contrário:
+- NUNCA diga nem dê a entender que consórcio é investimento, que rende, que dá retorno, que "se
+  paga" ou que é sempre mais barato que financiamento. Consórcio é uma forma planejada de ADQUIRIR
+  um bem. Esse é o enquadramento correto e é com ele que você trabalha.
+- NUNCA prometa, estime, sugira ou dê a entender prazo de contemplação, chance de ser contemplado
+  ou data provável. Se perguntarem, diga com clareza que o prazo é incerto - isso é característica
+  do produto, não ressalva de letra miúda.
+- NUNCA informe valor, taxa, parcela, prazo de contrato, regra de lance ou condição de grupo por
+  mensagem, nem aproximado, nem "mais ou menos", nem faixa. Se pedirem, trate como interesse real:
+  responda que isso você vê junto na conversa e marque "encaminhar_humano": true.
+- NUNCA invente custo, condição, regra ou característica do produto. Se você não tem a informação
+  no que foi cadastrado, não preencha a lacuna: encaminhe.
+
+Você PODE dizer que o consórcio tem taxa de administração e condições próprias de cada grupo, e que
+o prazo da contemplação é incerto. Falar isso não atrapalha a venda - é o que separa um cliente que
+entendeu o produto de um que vai reclamar depois.`;
+}
+
 // Chamada compartilhada pra API da Claude. Se falhar, o erro devolvido
 // inclui o motivo real que a Anthropic mandou (chave invalida, modelo
 // errado, etc), nao so o codigo de status generico do axios.
@@ -156,7 +188,17 @@ Você está conversando por WhatsApp com uma pessoa que respondeu ao seu contato
 Seu objetivo é UM só: marcar um horário de conversa (ligação ou reunião) com ela. Tudo que for
 detalhe, explicação a fundo ou negociação fica pra esse horário - não se resolve por mensagem.
 
+Enquanto conversa, descubra três coisas, UMA POR MENSAGEM, do jeito mais natural possível - isso é
+conversa, não formulário, e ninguém responde a um interrogatório:
+- Qual bem a pessoa quer (maquinário, terra, frota, benfeitoria...).
+- Para quando ela precisa.
+- Se ela entende e aceita que o prazo da contemplação é incerto.
+Não faça as três de uma vez, não repita uma que ela já respondeu, e não segure o agendamento
+esperando completar as três: se ela quiser marcar antes, marque.
+
 ${blocoRegras()}
+
+${blocoRegrasDuras()}
 
 Além das regras acima, valem estas, que são estruturais:
 - Se a pessoa perguntar se você é um robô, uma IA, um bot, um sistema automático, se isso é
@@ -177,6 +219,12 @@ Além das regras acima, valem estas, que são estruturais:
   atendimento automático - marque "horario_confirmado": true.
 - Se a pessoa pedir algo que as regras acima não cobrem, pedir pra falar com alguém, ou entrar em
   qualquer assunto que você não tem como resolver por mensagem, marque "encaminhar_humano": true.
+- Encaminhe IMEDIATAMENTE, sem gastar mais respostas, quando a pessoa: pedir valor, taxa, parcela
+  ou simulação; perguntar qual o próximo passo ou como faz pra contratar; disser que quer comprar
+  ou fechar; reclamar de alguma coisa; pedir garantia; ou se mostrar confusa sobre uma condição
+  importante do produto. Tudo isso é sinal de interesse real - não é hora de continuar conversando,
+  é hora de passar pra ${nomeConsultor}.
+- Se você ficar em dúvida sobre qualquer coisa, encaminhe. Encaminhar nunca é erro; inventar é.
 - Se a pessoa claramente encerrar a conversa sem marcar nada - agradecendo, se despedindo, dizendo
   que vai pensar, ou dando qualquer sinal de que não quer continuar agora - NÃO insista tentando
   marcar horário de novo. Responda algo breve e cordial de despedida e marque
@@ -189,7 +237,11 @@ Além das regras acima, valem estas, que são estruturais:
   curta e um pouco mais longa a cada troca), sempre puxando para marcar o horário.
 
 Responda SOMENTE com um JSON válido, neste formato exato, sem nenhum texto antes ou depois:
-{"resposta": "texto da mensagem para a pessoa (sempre preenchido)", "encaminhar_humano": true ou false, "horario_confirmado": true ou false, "descadastrar": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto (ex: horário confirmado, dúvida pendente), se encaminhar_humano OU horario_confirmado forem true"}`;
+{"resposta": "texto da mensagem para a pessoa (sempre preenchido)", "encaminhar_humano": true ou false, "horario_confirmado": true ou false, "descadastrar": true ou false, "motivo": "breve motivo, só se encaminhar_humano for true", "resumo_para_consultor": "1 linha de contexto (ex: horário confirmado, dúvida pendente), se encaminhar_humano OU horario_confirmado forem true", "qualificacao": {"bem": "o que a pessoa quer, nas palavras dela, ou null se ela ainda não disse", "prazo": "para quando ela precisa, ou null", "aceita_incerteza": true, false ou null}}
+
+Em "qualificacao", preencha SÓ o que a pessoa realmente disse nesta conversa. Nunca deduza, nunca
+chute e nunca preencha com o que seria provável - null é a resposta certa para o que ela ainda não
+falou. Repita em toda resposta o que ela já tinha dito antes, pra não perder o que já foi descoberto.`;
 
   const userPrompt = `Pessoa: ${leadNome || 'sem nome informado'}
 Histórico da conversa (mais antiga primeiro):
@@ -227,6 +279,7 @@ ${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Cliente' : nomeC
       horarioConfirmado: Boolean(parsed.horario_confirmado) && !descadastrar,
       motivo: parsed.motivo || null,
       resumoParaConsultor: parsed.resumo_para_consultor || null,
+      qualificacao: normalizarQualificacao(parsed.qualificacao),
     };
   } catch (erro) {
     // Se mesmo assim nao der pra interpretar, joga pro humano por
@@ -238,8 +291,36 @@ ${historicoConversa.slice(-20).map((m) => `${m.de === 'lead' ? 'Cliente' : nomeC
       horarioConfirmado: false,
       motivo: 'Resposta da IA em formato inesperado - encaminhado por segurança.',
       resumoParaConsultor: null,
+      qualificacao: null,
     };
   }
+}
+
+// Aceita so os tres campos previstos, e so nos tipos previstos. O que a IA
+// mandar fora disso e descartado em vez de ir parar no banco: isso e dado
+// que vai aparecer pra voce como se fosse o que o cliente falou, entao
+// campo estranho ou texto gigante aqui e pior que campo vazio.
+//
+// Devolve null quando nada foi descoberto ainda, pra nao gravar um objeto
+// so de nulls por cima do que ja estava preenchido.
+function normalizarQualificacao(bruto) {
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return null;
+
+  const texto = (valor) => {
+    if (typeof valor !== 'string') return null;
+    const limpo = valor.trim();
+    if (!limpo || limpo.toLowerCase() === 'null') return null;
+    return limpo.slice(0, 200);
+  };
+
+  const qualificacao = {
+    bem: texto(bruto.bem),
+    prazo: texto(bruto.prazo),
+    aceitaIncerteza: typeof bruto.aceita_incerteza === 'boolean' ? bruto.aceita_incerteza : null,
+  };
+
+  const temAlgo = qualificacao.bem || qualificacao.prazo || qualificacao.aceitaIncerteza !== null;
+  return temAlgo ? qualificacao : null;
 }
 
 module.exports = { responderConversa, descreverImagem };

@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { getLeadsParaEnvio, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, montarMensagemDeFollowup, followupEstaAtivo, getWhatsappPorId, numeroEstaBloqueado } = require('../db/store');
+const { getLeadsParaEnvio, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, montarMensagemDeFollowup, followupEstaAtivo, getWhatsappPorId, numeroEstaBloqueado, contarDestinatariosHoje, diaEmBrasilia } = require('../db/store');
 const { enviarMensagemComOpcoes, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
 
 // A esteira tem no maximo DUAS mensagens: a abertura e, pra quem nao
@@ -171,6 +171,13 @@ async function processarLead(lead) {
   upsertLead(lead.phone, {
     attemptsSent: tentativasFeitas,
     mensagensEnviadas: [...(lead.mensagensEnviadas || []), enviado.texto],
+    // Carimbo de quando cada mensagem saiu. E com isso que o teto diario
+    // conta pessoas por dia - sem a data, "quantos contatei hoje" nao tem
+    // resposta. Guarda so os ultimos 10: o lead recebe no maximo duas
+    // mensagens da esteira, entao essa lista nunca deveria crescer, e o
+    // corte evita que um lead reimportado varias vezes vire um array
+    // enorme dentro do db.json.
+    enviosEm: [...(lead.enviosEm || []), new Date().toISOString()].slice(-10),
     proximoEnvioEm: agendarFollowup ? sortearMomentoDoFollowup() : null,
     avisoFalhaEnviado: false,
     status: 'aguardando_resposta',
@@ -186,9 +193,15 @@ async function processarLead(lead) {
 // proximo ciclo: o lead continua 'sequence_active' com a hora ja vencida.
 let cicloEmAndamento = false;
 
+// Quais numeros ja avisaram "bati o teto" neste ciclo. So pra nao repetir a
+// mesma linha no log uma vez por lead da fila - com 200 leads esperando,
+// seriam 200 linhas identicas escondendo o resto.
+const avisoDeLimiteDado = new Set();
+
 async function rodarCiclo() {
   if (cicloEmAndamento) return;
   cicloEmAndamento = true;
+  avisoDeLimiteDado.clear();
 
   try {
     const leads = getLeadsParaEnvio();
@@ -213,6 +226,29 @@ async function rodarCiclo() {
       }
 
       if (!estaNaHoraDeEnviar(lead)) continue;
+
+      // Teto diario POR NUMERO. Checado aqui, lead a lead, e nao uma vez no
+      // inicio do ciclo: o proprio ciclo vai estourando o teto conforme
+      // manda, e um ciclo longo pode comecar com folga e acabar sem.
+      //
+      // O lead nao perde a vez - ele continua com a data vencida e e o
+      // primeiro a sair amanha, quando a contagem zera.
+      const limite = Number(getConfig().horarios.limiteDiarioDestinatarios) || 0;
+      if (limite > 0) {
+        const jaContatados = contarDestinatariosHoje(lead.whatsappId || null);
+        const esseLeadJaContaHoje = (lead.enviosEm || []).some(
+          (quando) => diaEmBrasilia(new Date(quando)) === diaEmBrasilia()
+        );
+        // Lead que ja recebeu hoje (caso da 2a tentativa no mesmo dia) nao
+        // consome uma vaga nova - ele ja esta dentro da conta.
+        if (!esseLeadJaContaHoje && jaContatados >= limite) {
+          if (!avisoDeLimiteDado.has(lead.whatsappId || 'padrao')) {
+            avisoDeLimiteDado.add(lead.whatsappId || 'padrao');
+            console.log(`Teto diário atingido (${jaContatados}/${limite}) no número ${lead.whatsappId || 'padrão'} - o resto da fila fica pra amanhã.`);
+          }
+          continue;
+        }
+      }
 
       // Espera so o que faltar pro NUMERO desse lead poder mandar de novo.
       // Se o lead anterior saiu por outro numero, nao ha espera nenhuma.
