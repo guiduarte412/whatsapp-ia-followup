@@ -15,6 +15,16 @@ function normalizarTelefone(valor) {
   return (valor || '').toString().replace(/\D/g, '');
 }
 
+// Quanto esperar antes de responder, pra juntar as mensagens que o lead
+// manda em sequencia. 12s cobre o caso comum (digitar a frase seguinte) sem
+// deixar a pessoa olhando pro vazio - no WhatsApp, responder depois de 10 ou
+// 15 segundos e normal; responder em 1 segundo e que denuncia robo.
+const SEGUNDOS_PARA_JUNTAR_MENSAGENS = Number(process.env.SEGUNDOS_PARA_JUNTAR_MENSAGENS || 12);
+
+function esperar(ms) {
+  return new Promise((resolver) => setTimeout(resolver, ms));
+}
+
 function normalizarTexto(valor) {
   return (valor || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -311,7 +321,31 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
     // esteira ja enviada) ou 'sequence_active' (ainda na fila de envio -
     // acontece se ele escrever antes da mensagem sair).
     appendConversa(telefoneLead, { de: 'lead', texto: textoRecebido });
-    const leadAtualizado = getLeadFlexivel(telefoneLead);
+
+    // Espera um pouco antes de responder.
+    //
+    // No WhatsApp ninguem escreve um paragrafo: manda "bom dia", depois
+    // "to querendo trocar o trator", depois "mas queria ver condicao". Sao
+    // tres webhooks, e sem esta espera a IA responde tres vezes - gastando
+    // 3 das 5 respostas num pensamento so, e soando robotica justamente por
+    // ser rapida demais.
+    //
+    // Como funciona: espera, rele a conversa, e se chegou mensagem nova do
+    // lead nesse meio tempo, esta chamada desiste. Quem responde e o webhook
+    // da ULTIMA mensagem, que ja enxerga as tres juntas no historico. O
+    // ultimo a chegar sempre responde, entao ninguem fica sem resposta.
+    await esperar(SEGUNDOS_PARA_JUNTAR_MENSAGENS * 1000);
+
+    const depoisDaEspera = getLeadFlexivel(telefoneLead);
+    if (!depoisDaEspera) return res.status(200).json({ ok: true });
+
+    const ultimaDoLead = [...(depoisDaEspera.conversa || [])].reverse().find((m) => m.de === 'lead');
+    if (ultimaDoLead && normalizarTexto(ultimaDoLead.texto) !== normalizarTexto(textoRecebido)) {
+      console.log(`Lead ${telefoneLead} mandou outra mensagem enquanto eu esperava - deixo a resposta pra ela.`);
+      return res.status(200).json({ ok: true, juntadoComAProxima: true });
+    }
+
+    const leadAtualizado = depoisDaEspera;
     const respostasAutomaticas = (leadAtualizado.respostasAutomaticas || 0) + 1;
     const maxRespostas = getConfig().maxRespostasAutomaticas;
 
