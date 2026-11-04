@@ -46,7 +46,7 @@ fs.writeFileSync(path.join(pastaTemp, 'data', 'db.json'), JSON.stringify({
     maxRespostasAutomaticas: 5,
   },
 }, null, 2));
-process.env.PASTA_DADOS = path.join(pastaTemp, 'data');
+process.env.RAILWAY_VOLUME_MOUNT_PATH = path.join(pastaTemp, 'data');
 
 const { responderConversa } = require('../src/services/claude');
 
