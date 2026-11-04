@@ -29,10 +29,48 @@ ou IA de atendimento representando alguém: você escreve como se fosse ${nome} 
 ${identidade.contexto.trim()}`);
   }
 
+  partes.push(blocoLinhasDoProduto());
+
   partes.push(`Tamanho: mensagens de WhatsApp são curtas. Nunca escreva blocos longos. Varie o
 tamanho entre uma mensagem e outra - gente de verdade não manda sempre mensagens do mesmo tamanho.`);
 
   return partes.join('\n\n');
+}
+
+// O que o consórcio da FourAgro cobre - no codigo, nao na tela.
+//
+// Esta lista viveu no campo "O que voce faz" das Configuracoes e isso se
+// mostrou perigoso num teste: perguntada sobre silo e barracao quando eles
+// ainda nao estavam na lista, a IA respondeu que "benfeitoria entra pela
+// linha de capital de giro - da pra usar o recurso pra tocar essa obra".
+// Ninguem disse isso a ela; ela inventou a condicao pra ser prestativa. Esse
+// e o pior erro do conjunto, porque soa certo e o cliente fecha confiando.
+//
+// Entao o escopo do produto passou a ser estrutural, como as proibicoes: um
+// campo de texto que da pra esvaziar sem querer nao e lugar pra informacao
+// que, errada, faz alguem assinar contrato contando com o que nao pode.
+// O campo das Configuracoes continua existindo pro que e seu - como voce se
+// apresenta, o que quer acrescentar.
+function blocoLinhasDoProduto() {
+  return `As linhas de cons\u00f3rcio com que voc\u00ea trabalha:
+1. M\u00e1quinas e implementos agr\u00edcolas - colheitadeira, trator, pulverizador, plantadeira
+2. Constru\u00e7\u00e3o e investimento na propriedade - silo, barrac\u00e3o, armaz\u00e9m, irriga\u00e7\u00e3o, benfeitoria
+3. Compra de fazenda - terra, \u00e1rea, im\u00f3vel rural
+4. Ve\u00edculos e caminh\u00f5es para log\u00edstica e transporte da produ\u00e7\u00e3o
+5. Capital de giro
+
+Praticamente tudo que o produtor precisa para tocar e ampliar a opera\u00e7\u00e3o entra em alguma dessas
+linhas. As parcelas acompanham o ciclo da safra.
+
+O que N\u00c3O \u00e9 deste produto, e a\u00ed voc\u00ea diz direto: im\u00f3vel urbano, apartamento, carro de passeio
+para uso pessoal, reforma de casa na cidade, viagem - qualquer coisa sem liga\u00e7\u00e3o com a atividade
+rural. Nesse caso diga que n\u00e3o \u00e9 esse o produto e pergunte se a pessoa tem alguma aquisi\u00e7\u00e3o
+ligada \u00e0 produ\u00e7\u00e3o em vista.
+
+E esta vale ACIMA da vontade de ajudar: nunca invente em qual linha uma coisa entra, e nunca crie
+uma linha que n\u00e3o est\u00e1 na lista. Se for algo rural que voc\u00ea n\u00e3o consegue situar com seguran\u00e7a
+em nenhuma das cinco, diga que confirma na liga\u00e7\u00e3o - afirmar errado faz a pessoa fechar contando
+com uma coisa que talvez n\u00e3o possa.`;
 }
 
 // As regras sao 100% definidas por voce na tela de Configuracoes. O codigo
