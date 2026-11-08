@@ -4,8 +4,8 @@ Atualizado em 08/11/2026. Documento para revisar com calma antes de qualquer mud
 
 ## O que já foi informado
 
-- **Os leads são frios:** eles ainda não iniciaram uma conversa com o Guilherme. Isso não prova, por si só, que não houve autorização em outro canal; porém, a planilha atual e o banco não guardam essa comprovação. Até existir prova registrável de autorização para receber mensagens pelo WhatsApp, a recomendação é não iniciar contato com esses leads.
-- **Janela de envio desejada:** das **07:00 às 20:30**. É uma regra escolhida pelo Guilherme, não um horário que estudos tenham demonstrado ser o melhor para leads de consórcio agrícola.
+- **Os leads são frios:** eles ainda não iniciaram uma conversa com o Guilherme. O Guilherme informou que não quer exigir nem guardar comprovante de autorização no CRM. Isso fica registrado como preferência do produto, mas não elimina as regras do canal: a política do WhatsApp Business exige opt-in para mensagens subsequentes. A forma de operar em conformidade continua pendente de validação antes de prospecção ativa.
+- **Janela de envio desejada:** de **segunda a sexta, 07:00–20:30**; **sábado, 07:00–12:00**; **domingo, sem envio**. É uma regra escolhida pelo Guilherme, não um horário que estudos tenham demonstrado ser o melhor para leads de consórcio agrícola. Como o sistema usa Brasília, o documento registra esse fuso como referência provisória.
 - **Limitação técnica confirmada:** hoje a configuração aceita horas inteiras e o agendador compara a hora inteira. Portanto, 20:30 não pode ser representado corretamente sem uma alteração no código. Não arredondar silenciosamente para 20:00 ou 21:00.
 
 ## Respostas preliminares às 16 perguntas
@@ -14,7 +14,7 @@ Legenda: **DECIDIDO** = informado pelo Guilherme; **RECOMENDAÇÃO** = proposta 
 
 ### Autorização e dados
 
-1. **Os leads autorizaram receber mensagem?** — **PENDENTE.** A informação disponível é que são leads frios, mas não sabemos como cada número foi obtido nem se houve opt-in específico para WhatsApp. Registrar a origem e guardar a evidência da autorização. Até lá, não enviar mensagens de prospecção. A política do WhatsApp Business exige que a pessoa tenha fornecido o número e dado permissão para receber mensagens subsequentes. [Política de Mensagens do WhatsApp Business](https://whatsappbusiness.com/policy/)
+1. **Os leads autorizaram receber mensagem?** — **DECIDIDO quanto ao CRM:** o Guilherme não quer criar campo para guardar comprovante. **PENDENTE quanto à origem e à autorização real:** ser lead frio não confirma nem nega autorização obtida por outro canal. A política do WhatsApp Business exige que a pessoa tenha fornecido o número e dado permissão para receber mensagens subsequentes; a preferência de não armazenar comprovante não remove essa exigência do canal. Não implementar uma forma de contornar a política. [Política de Mensagens do WhatsApp Business](https://whatsappbusiness.com/policy/)
 
 2. **Consentimento ou legítimo interesse como base legal?** — **PENDENTE de avaliação jurídica.** Não escolher uma base legal por padrão. A ANPD orienta avaliar finalidade, necessidade, balanceamento e salvaguardas para legítimo interesse; isso depende do caso concreto. [Guia da ANPD sobre legítimo interesse](https://www.gov.br/anpd/pt-br/assuntos/noticias/anpd-lanca-guia-orientativo-sobre-legitimo-interesse)
 
@@ -40,7 +40,7 @@ Legenda: **DECIDIDO** = informado pelo Guilherme; **RECOMENDAÇÃO** = proposta 
 
 ### Horários e cadência
 
-11. **Qual horário de envio aprovar?** — **DECIDIDO PARCIALMENTE:** janela escolhida pelo Guilherme: **07:00–20:30**. Ainda falta decidir os dias permitidos e confirmar se o horário é o de Brasília para todos os leads ou o horário local de cada lead. O sistema atual usa Brasília e só aceita hora inteira; será necessário implementar suporte a minutos para parar precisamente às 20:30. A janela ampla é uma preferência operacional, não uma conclusão científica: as fontes consultadas não determinam o melhor horário para prospecção de consórcio agrícola. Testar somente com leads que tenham autorização documentada e medir respostas, reuniões e opt-outs.
+11. **Qual horário de envio aprovar?** — **DECIDIDO:** segunda a sexta, **07:00–20:30**; sábado, **07:00–12:00**; domingo, sem envio. O horário de Brasília fica como referência provisória porque é o fuso atual do sistema. O sistema atual só aceita hora inteira; será necessário implementar suporte a minutos para parar precisamente às 20:30. A janela é uma preferência operacional, não uma conclusão científica: as fontes consultadas não determinam o melhor horário para prospecção de consórcio agrícola. A operação ainda precisa respeitar as regras de autorização do canal.
 
 12. **Feriados e mensagens recebidas fora da janela?** — **PENDENTE.** Decidir quais dias e feriados bloquear e se a IA responde a uma mensagem iniciada pelo lead à noite/madrugada ou apenas avisa o Guilherme. Manter separados: janela de prospecção ativa e resposta a quem iniciou conversa.
 
@@ -56,7 +56,7 @@ Legenda: **DECIDIDO** = informado pelo Guilherme; **RECOMENDAÇÃO** = proposta 
 
 ## Respostas que faltam do Guilherme
 
-1. Como os leads frios foram obtidos? Existe autorização explícita para receber mensagens pelo WhatsApp? Onde está a prova (formulário, anúncio, evento, indicação ou outro)?
+1. Como os leads frios foram obtidos e houve opt-in para receber mensagens pelo WhatsApp? O Guilherme decidiu não guardar comprovante no CRM; ainda é preciso validar como a operação atenderá à política do canal, que exige opt-in.
 2. Qual base legal foi avaliada com profissional de privacidade/jurídico?
 3. Você confirma os campos mínimos sugeridos e a proibição de pedir documentos/dados financeiros pelo WhatsApp?
 4. Qual prazo de retenção será aprovado após orientação jurídica?
@@ -66,7 +66,7 @@ Legenda: **DECIDIDO** = informado pelo Guilherme; **RECOMENDAÇÃO** = proposta 
 8. Aprova remover a alegação sobre parcelas acompanharem o ciclo da safra até prova documental?
 9. Aprova a apresentação transparente como assistente virtual do Guilherme? A FourAgro pode ser citada como empresa?
 10. Aprova apenas estudar a migração da Z-API para a plataforma oficial, sem fazer a migração ainda?
-11. A janela 07:00–20:30 foi registrada. Quais dias da semana? Horário de Brasília ou horário local do lead?
+11. A janela foi definida: segunda a sexta, 07:00–20:30; sábado, 07:00–12:00; domingo, sem envio. Brasília fica como referência provisória por ser o fuso atual do sistema. Confirmar se o Guilherme quer manter Brasília para todos os leads ou usar o horário local de cada lead.
 12. Quais feriados bloquear? Como tratar mensagens que o lead iniciar fora da janela?
 13. Autoriza primeiro um teste controlado de debounce, depois das correções de concorrência, sem ativar 6 segundos em produção agora?
 14. Aprova registrar os resultados comerciais mínimos após a ligação? Quem vai atualizá-los?

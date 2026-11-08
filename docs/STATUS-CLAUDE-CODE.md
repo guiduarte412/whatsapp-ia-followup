@@ -1,6 +1,15 @@
 # Status — Claude Code
 
-Atualizado em 08/11/2026. Nada foi commitado nem enviado (sem commit, sem push).
+Atualizado em 08/11/2026.
+
+## Publicação (08/11/2026, 16:55 UTC)
+
+- **PR #1** (`consertos-testes-e-proposta-ia` → `main`) foi mesclado por fast-forward no commit `789ffa7`. O GitHub mostra o PR como *merged*.
+- **Railway** (projeto `divine-cooperation`, serviço `whatsapp-ia-followup`): o deploy `63c42048` do commit `789ffa7` terminou com status **SUCCESS** às 16:56.
+- **Logs de inicialização:** "Servidor rodando na porta 8080" e "Agendador iniciado". Único erro registrado: o aviso do npm `Use --omit=dev instead`, que não afeta o funcionamento. Os logs com conversa de lead não foram lidos.
+- **Em produção agora:** consertos do webhook (trava de evento repetido em duas camadas, reconferência de encerramento, pausa e bloqueio, falha da IA vira encaminhamento) e do ciclo de envio (lead relido na hora de mandar, pausa reconferida depois da espera).
+- **Sem mudança de comportamento:** prompt, horários e regras da IA. Os documentos de `docs/ia-produto/` continuam sendo proposta.
+- **Fora da publicação:** edições em `docs/ia-produto/PERGUNTAS-PARA-GUILHERME.md` e `docs/ia-produto/README.md` feitas depois do PR (decisão de não guardar comprovante no CRM; janela seg–sex 07:00–20:30 e sábado 07:00–12:00). Continuam sem commit.
 
 ---
 

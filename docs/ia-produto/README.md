@@ -2,7 +2,7 @@
 
 Rascunho de 08/11/2026. **Nada desta proposta altera o bot em produção.** Nenhum código de runtime foi alterado nesta etapa.
 
-**Para responder às perguntas e revisar decisões pendentes, abra [`PERGUNTAS-PARA-GUILHERME.md`](PERGUNTAS-PARA-GUILHERME.md).** Já registramos que os leads são frios e que a janela desejada é 07:00–20:30; ainda falta comprovar autorização de contato e decidir os dias/fuso. O sistema atual não representa 20:30 sem alteração no código.
+**Para revisar as perguntas e decisões, abra [`PERGUNTAS-PARA-GUILHERME.md`](PERGUNTAS-PARA-GUILHERME.md).** Já registramos que os leads são frios; a janela escolhida é seg.–sex. 07:00–20:30, sábado 07:00–12:00 e domingo sem envio. Brasília está como referência provisória. O sistema atual não representa 20:30 sem alteração no código. O Guilherme não quer guardar comprovante de autorização no CRM, mas a exigência de opt-in da política do WhatsApp Business continua precisando ser atendida.
 
 ## 1. Onde fica cada coisa hoje
 
