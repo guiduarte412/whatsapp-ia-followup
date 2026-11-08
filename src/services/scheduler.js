@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { getLeadsParaEnvio, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, montarMensagemDeFollowup, followupEstaAtivo, getWhatsappPorId, numeroEstaBloqueado, contarDestinatariosHoje, diaEmBrasilia } = require('../db/store');
+const { getLead, getLeadsParaEnvio, upsertLead, appendConversa, getPausado, getConfig, montarMensagemDeAbertura, montarMensagemDeFollowup, followupEstaAtivo, getWhatsappPorId, numeroEstaBloqueado, contarDestinatariosHoje, diaEmBrasilia } = require('../db/store');
 const { enviarMensagemComOpcoes, avisarConsultor, formatarAvisoLead } = require('./whatsapp');
 
 // A esteira tem no maximo DUAS mensagens: a abertura e, pra quem nao
@@ -86,7 +86,26 @@ async function aguardarAVezDoNumero(chave) {
 // Envia a mensagem da vez - abertura ou 2a tentativa, conforme o que esse
 // lead ja recebeu. Devolve true se a mensagem realmente saiu; e isso que diz
 // ao ciclo se vale a pena esperar antes do proximo lead.
-async function processarLead(lead) {
+// Quem ainda esta esperando a mensagem da esteira (mesma regra do
+// getLeadsParaEnvio).
+function estaNaFila(lead) {
+  return lead.status === 'sequence_active'
+    || (lead.status === 'aguardando_resposta' && Boolean(lead.proximoEnvioEm));
+}
+
+async function processarLead(leadDaFila) {
+  // A fila e lida UMA vez no inicio do ciclo, e o ciclo segura 60-180s entre
+  // um envio e outro. Nesse meio tempo o lead pode ter respondido (o webhook
+  // tira ele da fila e passa pra conversa_ia), ou voce encerrou no painel.
+  // Trabalhar com a foto velha mandava a abertura pra quem ja estava
+  // conversando e ainda gravava "aguardando_resposta" por cima do status
+  // novo. Por isso rele o lead aqui, na hora de mandar.
+  const lead = getLead(leadDaFila.phone);
+  if (!lead || !estaNaFila(lead) || !estaNaHoraDeEnviar(lead)) {
+    console.log(`Lead ${leadDaFila.phone} saiu da fila durante o ciclo - nada enviado.`);
+    return false;
+  }
+
   // O lead pode ter sido bloqueado DEPOIS de entrar na fila - pediu pra
   // parar respondendo a outra conversa, ou voce bloqueou na mao no painel.
   // A mensagem dele ja esta agendada, entao sem essa checagem ela sairia
@@ -165,22 +184,30 @@ async function processarLead(lead) {
   // sistema dispararia a fila inteira de surpresa.
   const agendarFollowup = tentativasFeitas < totalDeTentativas(lead.whatsappId);
 
+  // O lead pode ter respondido ENQUANTO o envio acima estava em andamento.
+  // Se ele ja nao esta mais esperando, registra que a mensagem saiu, mas
+  // nao mexe no status nem agenda 2a tentativa pra quem ja esta conversando.
+  const depoisDoEnvio = getLead(lead.phone) || lead;
+  const aindaEsperando = depoisDoEnvio.status === 'sequence_active' || depoisDoEnvio.status === 'aguardando_resposta';
+  const mudancaDeEstado = aindaEsperando
+    ? { proximoEnvioEm: agendarFollowup ? sortearMomentoDoFollowup() : null, status: 'aguardando_resposta' }
+    : {};
+
   // Mensagem entregue: sai da fila de envio e passa a esperar a resposta.
   // Nao avisa voce aqui - isso e o caminho normal, o aviso so faz sentido
   // quando tem algo pra voce fazer.
   upsertLead(lead.phone, {
     attemptsSent: tentativasFeitas,
-    mensagensEnviadas: [...(lead.mensagensEnviadas || []), enviado.texto],
+    mensagensEnviadas: [...(depoisDoEnvio.mensagensEnviadas || []), enviado.texto],
     // Carimbo de quando cada mensagem saiu. E com isso que o teto diario
     // conta pessoas por dia - sem a data, "quantos contatei hoje" nao tem
     // resposta. Guarda so os ultimos 10: o lead recebe no maximo duas
     // mensagens da esteira, entao essa lista nunca deveria crescer, e o
     // corte evita que um lead reimportado varias vezes vire um array
     // enorme dentro do db.json.
-    enviosEm: [...(lead.enviosEm || []), new Date().toISOString()].slice(-10),
-    proximoEnvioEm: agendarFollowup ? sortearMomentoDoFollowup() : null,
+    enviosEm: [...(depoisDoEnvio.enviosEm || []), new Date().toISOString()].slice(-10),
     avisoFalhaEnviado: false,
-    status: 'aguardando_resposta',
+    ...mudancaDeEstado,
   });
 
   return true;
@@ -253,6 +280,12 @@ async function rodarCiclo() {
       // Espera so o que faltar pro NUMERO desse lead poder mandar de novo.
       // Se o lead anterior saiu por outro numero, nao ha espera nenhuma.
       await aguardarAVezDoNumero(lead.whatsappId || 'padrao');
+
+      // A espera acima dura 60-180s - e o momento mais provavel de voce
+      // apertar "Pausar". Conferir so antes dela deixava sair mais uma
+      // mensagem depois da pausa. Mesma coisa pro fim da janela de horario.
+      if (getPausado()) break;
+      if (!dentroDoHorarioPermitido()) break;
 
       try {
         if (await processarLead(lead)) enviados += 1;

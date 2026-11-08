@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const { getLeadFlexivel, upsertLead, appendConversa, getPausado, getConfig, getWhatsappPorId, numeroEstaBloqueado, bloquearNumero } = require('../db/store');
 const { avisarConsultor, enviarMensagem, formatarAvisoLead, foiEnviadaPorNos, escolhaDoLead } = require('../services/whatsapp');
@@ -110,6 +111,92 @@ async function registrarDescadastro({ lead, telefone, textoRecebido, conexao, de
   }), conexao).catch(() => {});
 }
 
+// --- Evento repetido da Z-API ---
+//
+// A Z-API reenvia o mesmo evento quando nao recebe o 200 dela em tempo - e
+// este handler segura a resposta DE PROPOSITO (o debounce espera o lead
+// terminar de digitar, 12s por padrao). Ou seja: a retentativa aqui nao e
+// excecao, e o comportamento esperado do provedor.
+//
+// Sem esta trava, o mesmo messageId era processado duas vezes e o resultado
+// media exatamente o que a trava de respostas existe pra evitar:
+//   - duas respostas pro lead pela mesma mensagem dele;
+//   - a mensagem dele duplicada no historico que a IA le depois;
+//   - no caso simultaneo, as duas chamadas leem respostasAutomaticas ANTES
+//     de qualquer uma gravar, entao saem duas mensagens e o contador sobe
+//     so uma - o teto de 5 respostas passa a valer menos do que diz.
+//
+// Sao duas travas, uma em cima da outra:
+//   - esta, em memoria: pega o reenvio de qualquer numero (ate de fora da
+//     base) e o evento SEM id;
+//   - a do lead (eventoJaVistoNoLead, mais abaixo): grava o messageId no
+//     proprio lead, no db.json, e por isso sobrevive a deploy/reinicio e
+//     nao tem prazo de validade.
+const eventosVistos = new Map(); // chave -> { quando, janela }
+const JANELA_EVENTO_MS = 10 * 60 * 1000;
+
+// Evento sem id (webhook antigo): a "impressao digital" e o payload inteiro.
+// Um reenvio da Z-API e byte a byte igual ao original; duas mensagens de
+// verdade quase sempre diferem em algum campo (horario, por exemplo). A
+// janela e curta de proposito: o reenvio chega em segundos (o handler segura
+// a resposta pelo debounce), e uma janela longa arriscaria engolir um "sim"
+// legitimo repetido muito depois.
+const JANELA_SEM_ID_MS = 2 * 60 * 1000;
+
+function chaveDoEvento(payload) {
+  const id = payload?.messageId || payload?.id;
+  if (id) return { chave: `id:${id}`, janela: JANELA_EVENTO_MS };
+  const impressao = crypto.createHash('sha1').update(JSON.stringify(payload || {})).digest('hex');
+  return { chave: `sem-id:${impressao}`, janela: JANELA_SEM_ID_MS };
+}
+
+function eventoJaProcessado(payload) {
+  const { chave, janela } = chaveDoEvento(payload);
+
+  const agora = Date.now();
+  for (const [outra, registro] of eventosVistos) {
+    if (agora - registro.quando > registro.janela) eventosVistos.delete(outra);
+  }
+
+  if (eventosVistos.has(chave)) return true;
+  // Marca ANTES de qualquer await: no reenvio simultaneo as duas chamadas
+  // chegam juntas, e uma marcacao feita depois de esperar nao pegaria a
+  // outra.
+  eventosVistos.set(chave, { quando: agora, janela });
+  return false;
+}
+
+// Trava persistente: os ultimos messageIds recebidos ficam gravados no
+// lead. Sem isso, um deploy do Railway no meio do debounce (ou uma
+// retentativa depois dos 10 min da trava em memoria) fazia o mesmo evento
+// ser processado de novo: segunda resposta pro lead e a mensagem dele
+// duplicada no historico. So vale pra evento COM id - a impressao digital do
+// evento sem id nao pode ficar gravada pra sempre.
+const MAX_EVENTOS_POR_LEAD = 100;
+
+function eventoJaVistoNoLead(lead, payload) {
+  const id = payload?.messageId || payload?.id;
+  if (!id) return false;
+  const vistos = Array.isArray(lead.eventosRecebidos) ? lead.eventosRecebidos : [];
+  if (vistos.includes(String(id))) return true;
+  // Sincrono (load + save), entao tambem acontece antes de qualquer await.
+  upsertLead(lead.phone, { eventosRecebidos: [...vistos, String(id)].slice(-MAX_EVENTOS_POR_LEAD) });
+  return false;
+}
+
+// O handler espera o debounce e depois a Claude - sao segundos em que voce
+// pode encerrar a conversa no painel, apertar "Pausar" ou bloquear o numero.
+// Sem reconferir, a IA respondia mesmo assim e ainda gravava "conversa_ia"
+// por cima do "encerrado". Devolve o motivo pra NAO responder, ou null.
+function motivoParaNaoResponder(telefone) {
+  const atual = getLeadFlexivel(telefone);
+  if (!atual) return 'lead removido';
+  if (getPausado()) return 'sistema pausado';
+  if (numeroEstaBloqueado(atual.phone)) return 'numero bloqueado';
+  if (atual.status === 'human_handoff' || atual.status === 'encerrado') return `status ${atual.status}`;
+  return null;
+}
+
 function segredoConfere(req) {
   const esperado = process.env.ZAPI_WEBHOOK_SEGREDO;
   if (!esperado) return true;
@@ -138,6 +225,14 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
     return res.status(200).json({ ok: true, ignorado: payload.type });
   }
 
+  // Reenvio do mesmo evento: responde 200 (senao a Z-API reenvia de novo) e
+  // nao processa nada. Vem depois do filtro de tipo de proposito, pra
+  // confirmacao de entrega nao ocupar a lista.
+  if (eventoJaProcessado(payload)) {
+    console.log('Evento repetido da Z-API ignorado (messageId ja processado).');
+    return res.status(200).json({ ok: true, repetido: true });
+  }
+
   const telefoneRecebido = normalizarTelefone(payload?.phone || payload?.from);
   if (!telefoneRecebido) return res.status(400).json({ erro: 'telefone nao encontrado no payload' });
 
@@ -148,6 +243,11 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
   }
 
   const telefoneLead = lead.phone;
+
+  if (eventoJaVistoNoLead(lead, payload)) {
+    console.log(`Evento repetido da Z-API ignorado (messageId ja gravado no lead ${telefoneLead}).`);
+    return res.status(200).json({ ok: true, repetido: true });
+  }
 
   // Responde SEMPRE pelo numero que recebeu a mensagem - e o numero que a
   // pessoa esta vendo na tela dela. So se a URL nao disser qual e (webhook
@@ -345,6 +445,12 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
       return res.status(200).json({ ok: true, juntadoComAProxima: true });
     }
 
+    const motivoDepoisDaEspera = motivoParaNaoResponder(telefoneLead);
+    if (motivoDepoisDaEspera) {
+      console.log(`Lead ${telefoneLead}: nao respondo (${motivoDepoisDaEspera}) - mudou enquanto eu esperava.`);
+      return res.status(200).json({ ok: true, naoRespondido: motivoDepoisDaEspera });
+    }
+
     const leadAtualizado = depoisDaEspera;
     const respostasAutomaticas = (leadAtualizado.respostasAutomaticas || 0) + 1;
     const maxRespostas = getConfig().maxRespostasAutomaticas;
@@ -359,11 +465,34 @@ router.post(['/whatsapp', '/whatsapp/:whatsappId'], express.json(), async (req, 
       return res.status(200).json({ ok: true });
     }
 
-    const resultado = await responderConversa({
-      leadNome: leadAtualizado.nome,
-      historicoConversa: leadAtualizado.conversa,
-      conexao,
-    });
+    // A Claude fora do ar (depois das retentativas do claude.js) nao pode
+    // virar silencio: antes, o erro caia no catch geral, que so gravava log -
+    // o lead ficava sem resposta, parado em "aguardando_resposta", e voce nao
+    // sabia. E a retentativa da Z-API nao salvava, porque a trava de evento
+    // repetido ja tinha marcado o messageId. Agora a conversa passa pra voce.
+    let resultado;
+    try {
+      resultado = await responderConversa({
+        leadNome: leadAtualizado.nome,
+        historicoConversa: leadAtualizado.conversa,
+        conexao,
+      });
+    } catch (erroIA) {
+      upsertLead(telefoneLead, { status: 'human_handoff', motivoEncerramento: 'falha_da_ia' });
+      await avisarConsultor(formatarAvisoLead({
+        nome: lead.nome,
+        telefone: telefoneLead,
+        contexto: `A IA não conseguiu responder (${erroIA.message}). Nada foi enviado pro lead - assuma a conversa.\nÚltima mensagem do lead: "${textoRecebido}"`,
+      }), conexao).catch(() => {});
+      return res.status(200).json({ ok: true });
+    }
+
+    // A chamada da Claude leva alguns segundos: reconfere antes de mandar.
+    const motivoDepoisDaIA = motivoParaNaoResponder(telefoneLead);
+    if (motivoDepoisDaIA) {
+      console.log(`Lead ${telefoneLead}: resposta da IA descartada (${motivoDepoisDaIA}) - mudou enquanto a IA pensava.`);
+      return res.status(200).json({ ok: true, naoRespondido: motivoDepoisDaIA });
+    }
 
     // Manda a resposta pro lead em qualquer um dos casos - a IA sempre
     // deixa uma mensagem educada antes de encaminhar ou encerrar, nunca

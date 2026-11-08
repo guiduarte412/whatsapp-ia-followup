@@ -6,7 +6,10 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "teste": "node testes/unidade.js && node testes/acesso.js && node testes/prompt.js && node testes/webhook.js && node testes/debounce.js && node testes/riscos.js",
+    "test": "npm run teste",
+    "teste:conversa": "node testes/conversa.js"
   },
   "dependencies": {
     "express": "^4.19.2",
